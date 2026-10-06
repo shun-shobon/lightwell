@@ -1,17 +1,26 @@
+use std::cell::RefCell;
 use std::path::{Path, PathBuf};
 
 use block2::RcBlock;
 use objc2::rc::Retained;
 use objc2::runtime::{AnyObject, NSObject};
-use objc2::{DefinedClass, MainThreadMarker, MainThreadOnly, define_class, msg_send, sel};
-use objc2_app_kit::{
-    NSApplication, NSApplicationActivationPolicy, NSEvent, NSEventModifierFlags, NSImage, NSMenu,
-    NSMenuItem, NSRunningApplication, NSScreen, NSStatusBar, NSStatusItem, NSView, NSWindow,
-    NSWindowStyleMask, NSWorkspace, NSWorkspaceOpenConfiguration,
+use objc2::{
+    AnyThread, DefinedClass, MainThreadMarker, MainThreadOnly, define_class, msg_send, sel,
 };
+use objc2_app_kit::{
+    NSApplication, NSApplicationActivationPolicy, NSAutoresizingMaskOptions, NSBitmapImageRep,
+    NSColor, NSColorSpace, NSCompositingOperation, NSDeviceRGBColorSpace, NSEvent,
+    NSEventModifierFlags, NSFont, NSFontWeightRegular, NSFontWeightSemibold, NSGraphicsContext,
+    NSImage, NSMenu, NSMenuItem, NSOpenPanel, NSRunningApplication, NSScreen, NSStatusBar,
+    NSStatusItem, NSView, NSVisualEffectBlendingMode, NSVisualEffectMaterial, NSVisualEffectState,
+    NSVisualEffectView, NSWindow, NSWindowOrderingMode, NSWindowStyleMask, NSWindowTitleVisibility,
+    NSWorkspace, NSWorkspaceOpenConfiguration,
+};
+use objc2_core_foundation::{CFNumber, CFRange, CFString, CFURL};
+use objc2_core_text::{CTFont, kCTFontURLAttribute};
 use objc2_foundation::{
     NSActivityOptions, NSAppleEventDescriptor, NSAppleEventManager, NSArray, NSBundle, NSError,
-    NSPoint, NSProcessInfo, NSSize, NSString, NSURL,
+    NSFileManager, NSPoint, NSProcessInfo, NSRect, NSSize, NSString, NSURL,
 };
 use objc2_service_management::{SMAppService, SMAppServiceStatus};
 use raw_window_handle::{HasWindowHandle, RawWindowHandle};
@@ -300,11 +309,6 @@ pub fn reveal_in_finder(path: &Path) {
         .activateFileViewerSelectingURLs(&NSArray::from_retained_slice(&[url]));
 }
 
-pub fn open_file(path: &Path) {
-    let url = NSURL::fileURLWithPath(&NSString::from_str(&path.to_string_lossy()));
-    NSWorkspace::sharedWorkspace().openURL(&url);
-}
-
 pub fn is_default_browser() -> bool {
     let probe = NSURL::URLWithString(&NSString::from_str("https://example.com")).unwrap();
     NSWorkspace::sharedWorkspace()
@@ -345,12 +349,62 @@ pub fn ns_window(handle: &impl HasWindowHandle) -> Option<Retained<NSWindow>> {
 
 const NORMAL_WINDOW_LEVEL: isize = 0;
 const POP_UP_MENU_WINDOW_LEVEL: isize = 101;
+const PICKER_CORNER_RADIUS: f64 = 14.0;
+
+thread_local! {
+    static BACKDROP: RefCell<Option<Retained<NSVisualEffectView>>> = const { RefCell::new(None) };
+}
+
+/// GLで描くeguiの背面に、すりガラス (NSVisualEffectView) を敷く。
+/// contentView (winitのビュー) の子にするとGLの描画を覆ってしまうので、contentView の兄弟として背面に置く。
+/// styleMask を変えると親のフレームビューが差し替わるので、その都度付け直す
+fn install_backdrop(window: &NSWindow, material: NSVisualEffectMaterial, corner_radius: f64) {
+    let Some(content) = window.contentView() else {
+        return;
+    };
+    let Some(frame_view) = (unsafe { content.superview() }) else {
+        return;
+    };
+    let mtm = window.mtm();
+    let effect = BACKDROP.with_borrow_mut(|slot| {
+        slot.get_or_insert_with(|| {
+            let effect =
+                NSVisualEffectView::initWithFrame(NSVisualEffectView::alloc(mtm), NSRect::ZERO);
+            effect.setBlendingMode(NSVisualEffectBlendingMode::BehindWindow);
+            effect.setState(NSVisualEffectState::Active);
+            effect.setAutoresizingMask(
+                NSAutoresizingMaskOptions::ViewWidthSizable
+                    | NSAutoresizingMaskOptions::ViewHeightSizable,
+            );
+            effect.setWantsLayer(true);
+            effect
+        })
+        .clone()
+    });
+    effect.removeFromSuperview();
+    effect.setMaterial(material);
+    effect.setFrame(frame_view.bounds());
+    let layer: Option<Retained<AnyObject>> = unsafe { msg_send![&*effect, layer] };
+    if let Some(layer) = layer {
+        let _: () = unsafe { msg_send![&*layer, setCornerRadius: corner_radius] };
+        let _: () = unsafe { msg_send![&*layer, setMasksToBounds: corner_radius > 0.0] };
+    }
+    frame_view.addSubview_positioned_relativeTo(
+        &effect,
+        NSWindowOrderingMode::Below,
+        Some(&content),
+    );
+    window.setOpaque(false);
+    window.setBackgroundColor(Some(&NSColor::clearColor()));
+}
 
 pub fn show_picker(window: &NSWindow, size: (f64, f64)) {
     let mtm = window.mtm();
     window.setStyleMask(NSWindowStyleMask::Borderless);
     window.setLevel(POP_UP_MENU_WINDOW_LEVEL);
+    window.setHasShadow(true);
     window.setContentSize(NSSize::new(size.0, size.1));
+    install_backdrop(window, NSVisualEffectMaterial::Menu, PICKER_CORNER_RADIUS);
 
     let mouse = NSEvent::mouseLocation();
     let screens = NSScreen::screens(mtm);
@@ -362,7 +416,8 @@ pub fn show_picker(window: &NSWindow, size: (f64, f64)) {
             && mouse.y <= f.origin.y + f.size.height
     });
     let frame = window.frame();
-    let (mut x, mut top) = (mouse.x - 16.0, mouse.y + 8.0);
+    // カーソルの真下に選択UIの中央が来るようにする
+    let (mut x, mut top) = (mouse.x - frame.size.width / 2.0, mouse.y + 12.0);
     if let Some(screen) = screen {
         let v = screen.visibleFrame();
         x = x.clamp(
@@ -375,19 +430,26 @@ pub fn show_picker(window: &NSWindow, size: (f64, f64)) {
     activate(mtm);
     window.setAlphaValue(1.0);
     window.makeKeyAndOrderFront(None);
+    window.invalidateShadow();
 }
 
-pub fn show_settings(window: &NSWindow, size: (f64, f64)) {
+pub fn show_settings(window: &NSWindow, size: (f64, f64), min_size: (f64, f64)) {
     let mtm = window.mtm();
     window.setStyleMask(
         NSWindowStyleMask::Titled
             | NSWindowStyleMask::Closable
             | NSWindowStyleMask::Miniaturizable
-            | NSWindowStyleMask::Resizable,
+            | NSWindowStyleMask::Resizable
+            | NSWindowStyleMask::FullSizeContentView,
     );
+    window.setTitlebarAppearsTransparent(true);
+    window.setTitleVisibility(NSWindowTitleVisibility::Hidden);
+    window.setTitle(&NSString::from_str("Lightwell"));
     window.setLevel(NORMAL_WINDOW_LEVEL);
-    window.setTitle(&NSString::from_str("Lightwell 設定"));
+    window.setHasShadow(true);
+    window.setContentMinSize(NSSize::new(min_size.0, min_size.1));
     window.setContentSize(NSSize::new(size.0, size.1));
+    install_backdrop(window, NSVisualEffectMaterial::Sidebar, 0.0);
     window.center();
     activate(mtm);
     window.setAlphaValue(1.0);
@@ -442,4 +504,239 @@ pub fn set_login_item(enabled: bool) -> Result<(), String> {
 
 pub fn open_login_items_settings() {
     unsafe { SMAppService::openSystemSettingsLoginItems() };
+}
+
+pub fn accent_color() -> [u8; 3] {
+    let fallback = [10, 130, 255];
+    let Some(color) =
+        NSColor::controlAccentColor().colorUsingColorSpace(&NSColorSpace::sRGBColorSpace())
+    else {
+        return fallback;
+    };
+    let c = |v: f64| (v.clamp(0.0, 1.0) * 255.0).round() as u8;
+    [
+        c(color.redComponent()),
+        c(color.greenComponent()),
+        c(color.blueComponent()),
+    ]
+}
+
+/// NSImage を正方形の乗算済みRGBAにラスタライズする
+pub fn rasterize(image: &NSImage, px: usize) -> Option<Vec<u8>> {
+    let size = px as isize;
+    let rep = unsafe {
+        NSBitmapImageRep::initWithBitmapDataPlanes_pixelsWide_pixelsHigh_bitsPerSample_samplesPerPixel_hasAlpha_isPlanar_colorSpaceName_bytesPerRow_bitsPerPixel(
+            NSBitmapImageRep::alloc(),
+            std::ptr::null_mut(),
+            size,
+            size,
+            8,
+            4,
+            true,
+            false,
+            NSDeviceRGBColorSpace,
+            size * 4,
+            32,
+        )
+    }?;
+    let ctx = NSGraphicsContext::graphicsContextWithBitmapImageRep(&rep)?;
+    NSGraphicsContext::saveGraphicsState_class();
+    NSGraphicsContext::setCurrentContext(Some(&ctx));
+    // アスペクト比を保ったまま中央に収める (SF Symbolsは正方形とは限らない)
+    let src = image.size();
+    let scale = (px as f64 / src.width.max(1.0)).min(px as f64 / src.height.max(1.0));
+    let (w, h) = (src.width * scale, src.height * scale);
+    let rect = NSRect::new(
+        NSPoint::new((px as f64 - w) / 2.0, (px as f64 - h) / 2.0),
+        NSSize::new(w, h),
+    );
+    image.drawInRect_fromRect_operation_fraction(
+        rect,
+        NSRect::ZERO,
+        NSCompositingOperation::SourceOver,
+        1.0,
+    );
+    ctx.flushGraphics();
+    NSGraphicsContext::restoreGraphicsState_class();
+
+    let data = rep.bitmapData();
+    if data.is_null() {
+        return None;
+    }
+    let len = (rep.bytesPerRow() * size) as usize;
+    Some(unsafe { std::slice::from_raw_parts(data, len) }.to_vec())
+}
+
+pub fn app_icon(path: &Path, px: usize) -> Option<Vec<u8>> {
+    let image =
+        NSWorkspace::sharedWorkspace().iconForFile(&NSString::from_str(&path.to_string_lossy()));
+    rasterize(&image, px)
+}
+
+/// SF Symbols を白で描いたRGBA。eguiの tint で好きな色にできる
+pub fn symbol(name: &str, px: usize) -> Option<Vec<u8>> {
+    let image = NSImage::imageWithSystemSymbolName_accessibilityDescription(
+        &NSString::from_str(name),
+        None,
+    )?;
+    let mut rgba = rasterize(&image, px)?;
+    for pixel in rgba.chunks_exact_mut(4) {
+        let a = pixel[3];
+        pixel[0] = a;
+        pixel[1] = a;
+        pixel[2] = a;
+    }
+    Some(rgba)
+}
+
+pub struct AppInfo {
+    pub name: String,
+    pub path: PathBuf,
+}
+
+pub fn app_info(bundle_id: &str) -> Option<AppInfo> {
+    let path = app_path_for_bundle_id(bundle_id)?;
+    let name = NSFileManager::defaultManager()
+        .displayNameAtPath(&NSString::from_str(&path.to_string_lossy()))
+        .to_string();
+    Some(AppInfo {
+        name: name.trim_end_matches(".app").to_owned(),
+        path,
+    })
+}
+
+/// アプリを選ぶダイアログを出し、選ばれたアプリのバンドルIDを返す
+#[allow(deprecated)]
+pub fn choose_app(mtm: MainThreadMarker) -> Option<String> {
+    let panel = NSOpenPanel::openPanel(mtm);
+    panel.setCanChooseDirectories(false);
+    panel.setAllowsMultipleSelection(false);
+    // setAllowedContentTypes は UniformTypeIdentifiers への依存が増えるだけなので使わない
+    panel.setAllowedFileTypes(Some(&NSArray::from_retained_slice(&[NSString::from_str(
+        "app",
+    )])));
+    panel.setDirectoryURL(Some(&NSURL::fileURLWithPath(&NSString::from_str(
+        "/Applications",
+    ))));
+    activate(mtm);
+    if panel.runModal() != 1 {
+        return None;
+    }
+    let url = panel.URLs().firstObject()?;
+    Some(
+        NSBundle::bundleWithURL(&url)?
+            .bundleIdentifier()?
+            .to_string(),
+    )
+}
+
+#[cfg(debug_assertions)]
+pub fn force_light_appearance() {
+    let Some(mtm) = MainThreadMarker::new() else {
+        return;
+    };
+    let appearance = objc2_app_kit::NSAppearance::appearanceNamed(unsafe {
+        objc2_app_kit::NSAppearanceNameAqua
+    });
+    NSApplication::sharedApplication(mtm).setAppearance(appearance.as_deref());
+}
+
+#[cfg(debug_assertions)]
+pub fn window_number(window: &NSWindow) -> isize {
+    window.windowNumber()
+}
+
+/// フォントファイルの中の1書体と、可変フォントの軸の値
+pub struct FontFace {
+    pub bytes: Vec<u8>,
+    /// .ttc の中の何番目の書体か
+    pub index: u32,
+    pub variation: Vec<([u8; 4], f32)>,
+}
+
+/// macOS が UI に使っているフォント
+pub struct UiFonts {
+    pub regular: Option<FontFace>,
+    pub semibold: Option<FontFace>,
+    pub japanese: Option<FontFace>,
+    pub japanese_semibold: Option<FontFace>,
+}
+
+/// システムフォントと、その日本語の代替フォントを CoreText に問い合わせる
+pub fn ui_fonts(size: f64) -> UiFonts {
+    let regular = NSFont::systemFontOfSize_weight(size, unsafe { NSFontWeightRegular });
+    let semibold = NSFont::systemFontOfSize_weight(size, unsafe { NSFontWeightSemibold });
+    let (regular, semibold) = (as_ct_font(&regular), as_ct_font(&semibold));
+    UiFonts {
+        regular: font_face(regular),
+        semibold: font_face(semibold),
+        japanese: font_face(&fallback_for(regular, "あ", "ja")),
+        japanese_semibold: font_face(&fallback_for(semibold, "あ", "ja")),
+    }
+}
+
+fn as_ct_font(font: &NSFont) -> &CTFont {
+    // NSFont と CTFont は toll-free bridged
+    unsafe { &*(font as *const NSFont).cast::<CTFont>() }
+}
+
+/// `text` を描くときに CoreText が実際に選ぶフォント
+fn fallback_for(
+    font: &CTFont,
+    text: &str,
+    language: &str,
+) -> objc2_core_foundation::CFRetained<CTFont> {
+    let text = CFString::from_str(text);
+    let range = CFRange {
+        location: 0,
+        length: text.length(),
+    };
+    unsafe { font.for_string_with_language(&text, range, Some(&CFString::from_str(language))) }
+}
+
+fn font_face(font: &CTFont) -> Option<FontFace> {
+    let url = unsafe { font.attribute(kCTFontURLAttribute) }?
+        .downcast::<CFURL>()
+        .ok()?;
+    let bytes = std::fs::read(url.to_file_path()?).ok()?;
+    let postscript_name = unsafe { font.post_script_name() }.to_string();
+    let index = face_index(&bytes, &postscript_name).unwrap_or(0);
+    Some(FontFace {
+        bytes,
+        index,
+        variation: variation(font),
+    })
+}
+
+/// .ttc には複数の書体が入っているので、PostScript 名で目的の書体を探す
+fn face_index(bytes: &[u8], postscript_name: &str) -> Option<u32> {
+    use skrifa::MetadataProvider;
+    let file = skrifa::raw::FileRef::new(bytes).ok()?;
+    file.fonts()
+        .position(|font| {
+            font.ok()
+                .and_then(|font| {
+                    font.localized_strings(skrifa::string::StringId::POSTSCRIPT_NAME)
+                        .english_or_first()
+                        .map(|name| name.to_string() == postscript_name)
+                })
+                .unwrap_or(false)
+        })
+        .map(|i| i as u32)
+}
+
+fn variation(font: &CTFont) -> Vec<([u8; 4], f32)> {
+    let Some(dict) = (unsafe { font.variation() }) else {
+        return Vec::new();
+    };
+    let dict = unsafe { dict.cast_unchecked::<CFNumber, objc2_core_foundation::CFType>() };
+    let (keys, values) = dict.to_vecs();
+    keys.iter()
+        .zip(values)
+        .filter_map(|(axis, value)| {
+            let tag = (axis.as_i64()? as u32).to_be_bytes();
+            let value = value.downcast::<CFNumber>().ok()?.as_f64()? as f32;
+            Some((tag, value))
+        })
+        .collect()
 }

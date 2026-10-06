@@ -16,6 +16,8 @@ codesign --force --sign - "$app"
 if [[ "${1:-}" == "--install" ]]; then
   dest="$HOME/Applications/Lightwell.app"
   pkill -x lightwell || true
+  # 終了しきる前に open すると、LaunchServices が終了中のプロセスに送ろうとして -600 で失敗する
+  while pgrep -x lightwell >/dev/null; do sleep 0.1; done
   mkdir -p "$HOME/Applications"
   rm -rf "$dest"
   cp -R "$app" "$dest"

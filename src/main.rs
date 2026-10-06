@@ -3,6 +3,7 @@ mod browsers;
 mod config;
 mod macos;
 mod router;
+mod ui;
 
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -33,7 +34,8 @@ fn main() -> eframe::Result {
         viewport: egui::ViewportBuilder::default()
             .with_title("Lightwell")
             .with_inner_size([360.0, 240.0])
-            .with_visible(false),
+            .with_visible(false)
+            .with_transparent(true),
         // winitはデフォルトでRegularを明示的に設定するため、Info.plistのLSUIElementだけではDockに出てしまう
         event_loop_builder: Some(Box::new(|builder| {
             builder.with_activation_policy(ActivationPolicy::Accessory);

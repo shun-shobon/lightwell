@@ -29,9 +29,9 @@ bundle_id = "com.apple.Safari"
 
 [[picker_items]]     # 選択 UI に並べるブラウザと順番。省略すると検出したものをすべて表示
 bundle_id = "com.google.Chrome"
-profile = "Profile 1"
+profile = "Profile 1"   # 省略すると、最後に使ったプロファイルで開く
 
-[[picker_items]]
+[[picker_items]]       # picker_items に書いていないものは表示しない
 bundle_id = "com.apple.Safari"
 
 [[rules]]            # 上から順に評価し、最初にマッチしたものを使う
@@ -47,11 +47,15 @@ profile = "Profile 1"   # ~/Library/Application Support/Google/Chrome 配下の�
 
 1 つのルール内の条件はすべて満たす必要があり、省略した条件は「何でもよい」扱いになる。条件が 1 つもないルールは何にもマッチしない。
 
-選択 UI では数字キー・矢印キーと Enter・クリックで選択し、Esc かフォーカスを外すとキャンセルする。
+選択 UI では数字キー・矢印キーと Enter・クリックで選択し、Esc かフォーカスを外すとキャンセルする。設定画面での変更は自動で保存される。
 
 ## 開発
 
 ```sh
 cargo test
 cargo run      # 未バンドルで起動。URL の受け取りを試すには bundle.sh で .app にする必要がある
+
+# 見た目の確認 (デバッグビルドのみ)。起動直後に表示し、screencapture -l に渡すウィンドウ番号を出力する
+LIGHTWELL_PREVIEW=picker cargo run                 # settings / settings:picker / settings:rules / settings:rule も可
+LIGHTWELL_PREVIEW=settings LIGHTWELL_THEME=light cargo run
 ```

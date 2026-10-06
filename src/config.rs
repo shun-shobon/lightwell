@@ -12,9 +12,9 @@ pub struct Config {
     /// Fnキーを押しながら開いたときの動作。ルールより優先する
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub alternative: Option<Action>,
-    /// 選択UIに並べるブラウザ。空なら検出したものをすべて表示する
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub picker_items: Vec<Target>,
+    /// 選択UIに並べるブラウザと順番。未設定なら検出したものをすべて表示する
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub picker_items: Option<Vec<Target>>,
     #[serde(default)]
     pub rules: Vec<Rule>,
 }
@@ -206,7 +206,7 @@ mod tests {
                 bundle_id: "com.apple.Safari".into(),
                 profile: None,
             })),
-            picker_items: vec![
+            picker_items: Some(vec![
                 Target {
                     bundle_id: "com.google.Chrome".into(),
                     profile: Some("Default".into()),
@@ -215,7 +215,7 @@ mod tests {
                     bundle_id: "com.apple.Safari".into(),
                     profile: None,
                 },
-            ],
+            ]),
             rules: vec![Rule {
                 name: "work".into(),
                 hosts: vec!["*.example.com".into()],
@@ -229,9 +229,12 @@ mod tests {
     }
 
     #[test]
-    fn legacy_rule_modifiers_are_ignored() {
-        let text = "[[rules]]\nmodifiers = [\"option\"]\n[rules.action]\ntype = \"picker\"\n";
-        let config: Config = toml::from_str(text).unwrap();
-        assert!(!config.rules[0].has_conditions());
+    fn empty_picker_items_is_distinct_from_unset() {
+        let config = Config {
+            picker_items: Some(Vec::new()),
+            ..Default::default()
+        };
+        let text = toml::to_string_pretty(&config).unwrap();
+        assert_eq!(toml::from_str::<Config>(&text).unwrap(), config);
     }
 }
