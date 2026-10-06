@@ -45,7 +45,6 @@ pub fn host_of(url: &str) -> Option<&str> {
     (!host.is_empty()).then_some(host)
 }
 
-/// `*` だけを特別扱いする、大文字小文字を区別しないglob
 pub fn glob(pattern: &str, text: &str) -> bool {
     let p: Vec<char> = pattern.to_lowercase().chars().collect();
     let t: Vec<char> = text.to_lowercase().chars().collect();

@@ -1,6 +1,4 @@
 #!/usr/bin/env bash
-# リリースビルドして target/release/Lightwell.app を作る。
-# --install を付けると ~/Applications に配置して起動する。
 set -euo pipefail
 
 cd "$(dirname "$0")/.."

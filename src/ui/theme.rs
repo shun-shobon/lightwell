@@ -9,13 +9,9 @@ use crate::macos::{self, FontFace};
 
 const SEMIBOLD: &str = "semibold";
 
-/// macOS のテキストスタイル (NSFont.TextStyle) に合わせた文字の種類。
-/// 文字サイズと太さはここだけで決め、各画面は種類で指定する
 #[derive(Clone, Copy)]
 pub enum Typography {
-    /// ページの見出し
     Title,
-    /// 小見出しや強調
     Headline,
     Body,
     Callout,
@@ -66,7 +62,6 @@ impl Typography {
     }
 }
 
-/// macOS のシステムカラーを egui で再現するための色
 #[derive(Clone, Copy)]
 pub struct Palette {
     pub window: Color32,
@@ -237,7 +232,6 @@ fn visuals(theme: Theme, p: Palette) -> Visuals {
         widget.corner_radius = radius;
         widget.expansion = 0.0;
     }
-    // テキスト入力欄はフォーカス時にアクセントカラーの枠
     w.active.bg_stroke = Stroke::new(1.5, p.accent.gamma_multiply(0.8));
     v
 }

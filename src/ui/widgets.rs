@@ -10,21 +10,17 @@ use super::theme::{Palette, Typography};
 
 const GROUP_PADDING: Margin = Margin::symmetric(12, 0);
 const ROW_PADDING: Margin = Margin::symmetric(0, 8);
-/// コントロールの高さ。行の高さはこれに ROW_PADDING を足したものになる
 const CONTROL_HEIGHT: f32 = 22.0;
 const DRAG_HANDLE: Vec2 = vec2(14.0, 22.0);
 
-/// 残りの幅をすべて使う flex アイテム。f.add() で置いたウィジェットは幅いっぱいに引き伸ばされる
 pub fn fill() -> FlexItem<'static> {
     item().grow(1.0).basis(0.0)
 }
 
-/// 残りの幅を使う左寄せのテキスト。収まらない分は省略する
 pub fn fill_text(f: &mut FlexInstance, text: impl Into<egui::WidgetText>) {
     f.add_widget(fill(), fitted_text(text.into(), egui::Align::Min));
 }
 
-/// 縦に並べる、幅いっぱいで左寄せのテキストの列
 pub fn text_column(f: &mut FlexInstance, lines: Vec<egui::WidgetText>) {
     f.add_flex(
         fill(),
@@ -39,7 +35,6 @@ pub fn text_column(f: &mut FlexInstance, lines: Vec<egui::WidgetText>) {
     );
 }
 
-/// 与えられた幅をすべて占め、収まらない分は省略して描くテキスト。
 /// Label は文字の大きさだけ確保して中央に置かれるので、flex で引き伸ばしても文字を寄せられない。
 /// また最小幅を求めないので、長い文字で flex アイテムが押し広げられることもない
 pub fn fitted_text(text: egui::WidgetText, align: egui::Align) -> impl egui::Widget {
@@ -65,7 +60,6 @@ pub fn fitted_text(text: egui::WidgetText, align: egui::Align) -> impl egui::Wid
     }
 }
 
-/// macOS のスイッチ
 pub fn toggle(ui: &mut Ui, on: &mut bool) -> Response {
     let (rect, mut response) = ui.allocate_exact_size(vec2(32.0, 18.0), Sense::click());
     if response.clicked() {
@@ -105,7 +99,6 @@ fn lerp_color(a: Color32, b: Color32, t: f32) -> Color32 {
     )
 }
 
-/// macOS のチェックボックス
 pub fn checkbox(ui: &mut Ui, on: &mut bool) -> Response {
     let (rect, mut response) = ui.allocate_exact_size(Vec2::splat(18.0), Sense::click());
     if response.clicked() {
@@ -134,7 +127,6 @@ pub fn checkbox(ui: &mut Ui, on: &mut bool) -> Response {
     response
 }
 
-/// グループの上に付く小見出し
 pub fn section_header(ui: &mut Ui, text: &str) {
     Frame::new()
         .inner_margin(Margin {
@@ -148,7 +140,6 @@ pub fn section_header(ui: &mut Ui, text: &str) {
         });
 }
 
-/// グループの下に付く注釈
 pub fn footnote(ui: &mut Ui, text: &str) {
     Frame::new()
         .inner_margin(Margin {
@@ -162,7 +153,6 @@ pub fn footnote(ui: &mut Ui, text: &str) {
         });
 }
 
-/// 角丸の背景に区切り線付きで行を並べる、システム設定風のフォーム
 pub fn group<R>(ui: &mut Ui, add_rows: impl FnOnce(&mut Group<'_>) -> R) -> R {
     let p = Palette::of(ui);
     Frame::new()
@@ -184,7 +174,6 @@ pub struct Group<'a> {
 }
 
 impl Group<'_> {
-    /// 1行を flex で組む。行の矩形を返す
     pub fn row<R>(&mut self, content: impl FnOnce(&mut FlexInstance) -> R) -> (R, Rect) {
         if self.rows > 0 {
             self.ui.add(egui::Separator::default().spacing(0.0));
@@ -206,7 +195,6 @@ impl Group<'_> {
         (response.inner, response.response.rect)
     }
 
-    /// 左にラベル、右にコントロール
     pub fn labeled<R>(&mut self, label: &str, control: impl FnOnce(&mut Ui) -> R) -> R {
         self.row(|f| {
             fill_text(f, label);
@@ -215,7 +203,6 @@ impl Group<'_> {
         .0
     }
 
-    /// 左にラベルと補足説明、右にコントロール
     pub fn described<R>(
         &mut self,
         label: &str,
@@ -235,7 +222,6 @@ fn secondary(ui: &Ui, text: &str) -> RichText {
     RichText::new(text).color(Palette::of(ui).secondary)
 }
 
-/// 色付き角丸の上に白いシンボルを載せたアイコン (システム設定のサイドバー風)
 pub fn symbol_badge(ui: &mut Ui, symbol: Option<&TextureHandle>, color: Color32, size: f32) {
     let (rect, _) = ui.allocate_exact_size(Vec2::splat(size), Sense::hover());
     ui.painter()
@@ -257,7 +243,6 @@ pub fn icon(icon: Option<&TextureHandle>, size: f32) -> impl egui::Widget + '_ {
     }
 }
 
-/// SF Symbols を任意の色で描く
 pub fn symbol(symbol: Option<&TextureHandle>, size: f32, tint: Color32) -> impl egui::Widget + '_ {
     move |ui: &mut Ui| {
         let (rect, response) = ui.allocate_exact_size(Vec2::splat(size), Sense::hover());
@@ -268,7 +253,6 @@ pub fn symbol(symbol: Option<&TextureHandle>, size: f32, tint: Color32) -> impl 
     }
 }
 
-/// 行内の削除ボタンなどに使う、シンボルだけのボタン
 pub fn symbol_button(ui: &mut Ui, symbol: Option<&TextureHandle>, tint: Color32) -> Response {
     let (rect, response) = ui.allocate_exact_size(Vec2::splat(22.0), Sense::click());
     if response.hovered() {
@@ -283,7 +267,6 @@ pub fn symbol_button(ui: &mut Ui, symbol: Option<&TextureHandle>, tint: Color32)
     response
 }
 
-/// 枠なしのアクセントカラーのボタン (「＋ 追加」など)
 pub fn link_button(text: &str) -> impl egui::Widget + '_ {
     move |ui: &mut Ui| {
         let accent = Palette::of(ui).accent;
@@ -291,8 +274,6 @@ pub fn link_button(text: &str) -> impl egui::Widget + '_ {
     }
 }
 
-/// 行頭のドラッグハンドルで並べ替えられる、グループ内の行。
-/// `row` には行の中身 (ハンドルの右側) を flex で追加する
 pub fn reorderable<T>(
     group: &mut Group<'_>,
     id: Id,
@@ -334,7 +315,6 @@ pub fn reorderable<T>(
 
     let Some(from) = dragging else { return };
     let ui = &mut *group.ui;
-    // 挿入位置 (この行の前に入れる)
     let to = ui.ctx().pointer_interact_pos().map(|p| {
         rects
             .iter()
@@ -361,7 +341,6 @@ pub fn reorderable<T>(
     }
 }
 
-/// 並べ替えられない行を、ドラッグハンドルの行と頭を揃えて置くための空き
 pub fn drag_handle_spacer(ui: &mut Ui) {
     ui.allocate_exact_size(DRAG_HANDLE, Sense::hover());
 }
@@ -386,14 +365,12 @@ fn drag_handle(ui: &mut Ui) -> Response {
     response
 }
 
-/// アイコン付きの選択肢から1つ選ぶポップアップボタン
 pub struct PopupOption<T> {
     pub value: T,
     pub label: String,
     pub icon: Option<TextureHandle>,
 }
 
-/// `indicator` は右端に出す上下矢印 (SF Symbols の chevron.up.chevron.down)
 pub fn popup<T: PartialEq + Clone>(
     ui: &mut Ui,
     current: &mut T,

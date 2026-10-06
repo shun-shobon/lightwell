@@ -445,7 +445,6 @@ pub fn show_picker(window: &NSWindow, size: (f64, f64)) {
             && mouse.y <= f.origin.y + f.size.height
     });
     let frame = window.frame();
-    // カーソルの真下に選択UIの中央が来るようにする
     let (mut x, mut top) = (mouse.x - frame.size.width / 2.0, mouse.y + 12.0);
     if let Some(screen) = screen {
         let v = screen.visibleFrame();
@@ -550,7 +549,6 @@ pub fn accent_color() -> [u8; 3] {
     ]
 }
 
-/// NSImage を正方形の乗算済みRGBAにラスタライズする
 pub fn rasterize(image: &NSImage, px: usize) -> Option<Vec<u8>> {
     let size = px as isize;
     let rep = unsafe {
@@ -634,7 +632,6 @@ pub fn app_info(bundle_id: &str) -> Option<AppInfo> {
     })
 }
 
-/// アプリを選ぶダイアログを出し、選ばれたアプリのバンドルIDを返す
 #[allow(deprecated)]
 pub fn choose_app(mtm: MainThreadMarker) -> Option<String> {
     let panel = NSOpenPanel::openPanel(mtm);
@@ -675,15 +672,12 @@ pub fn window_number(window: &NSWindow) -> isize {
     window.windowNumber()
 }
 
-/// フォントファイルの中の1書体と、可変フォントの軸の値
 pub struct FontFace {
     pub bytes: Vec<u8>,
-    /// .ttc の中の何番目の書体か
     pub index: u32,
     pub variation: Vec<([u8; 4], f32)>,
 }
 
-/// macOS が UI に使っているフォント
 pub struct UiFonts {
     pub regular: Option<FontFace>,
     pub semibold: Option<FontFace>,
@@ -691,7 +685,6 @@ pub struct UiFonts {
     pub japanese_semibold: Option<FontFace>,
 }
 
-/// システムフォントと、その日本語の代替フォントを CoreText に問い合わせる
 pub fn ui_fonts(size: f64) -> UiFonts {
     let regular = NSFont::systemFontOfSize_weight(size, unsafe { NSFontWeightRegular });
     let semibold = NSFont::systemFontOfSize_weight(size, unsafe { NSFontWeightSemibold });
@@ -709,7 +702,6 @@ fn as_ct_font(font: &NSFont) -> &CTFont {
     unsafe { &*(font as *const NSFont).cast::<CTFont>() }
 }
 
-/// `text` を描くときに CoreText が実際に選ぶフォント
 fn fallback_for(
     font: &CTFont,
     text: &str,

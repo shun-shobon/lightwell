@@ -14,7 +14,6 @@ use crate::macos::{self, LoginItemStatus, RunningApp};
 pub const SIZE: (f64, f64) = (760.0, 540.0);
 pub const MIN_SIZE: (f64, f64) = (640.0, 420.0);
 const SIDEBAR_WIDTH: f32 = 200.0;
-/// 信号機ボタンが乗るタイトルバー部分の高さ
 const TITLEBAR_HEIGHT: f32 = 52.0;
 const AUTOSAVE_DELAY: Duration = Duration::from_millis(400);
 const WARNING: Color32 = Color32::from_rgb(230, 140, 20);
@@ -27,7 +26,7 @@ enum Page {
     Rule(usize),
 }
 
-/// 描画後に App 側で行う副作用。描画中は Core を借用しているので、ここに積んでおく
+/// 描画中は Core を借用しているので、副作用はここに積んで描画後に App 側で行う
 #[derive(Default)]
 pub struct Effects {
     pub save: Option<Config>,
@@ -742,7 +741,6 @@ fn action_options(
     .collect()
 }
 
-/// 編集途中の空欄などを取り除いた、保存する形
 fn normalize(config: &Config) -> Config {
     let clean = |v: &[String]| {
         v.iter()

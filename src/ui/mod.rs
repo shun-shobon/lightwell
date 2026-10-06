@@ -13,7 +13,6 @@ use crate::macos;
 const SMALL_ICON_SIZE: usize = 64;
 const SYMBOL_SIZE: usize = 64;
 
-/// アプリアイコンや SF Symbols をテクスチャ化したもののキャッシュ。
 /// ラスタライズは数ミリ秒かかるので、表示のたびに作り直さない
 #[derive(Default)]
 pub struct Textures {

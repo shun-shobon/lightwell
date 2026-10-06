@@ -15,7 +15,6 @@ pub struct Browser {
     pub name: String,
     pub app_path: PathBuf,
     pub profiles: Vec<Profile>,
-    /// 乗算済みアルファのRGBA (ICON_SIZE x ICON_SIZE)
     pub icon: Option<Vec<u8>>,
 }
 
@@ -24,7 +23,6 @@ pub struct Profile {
     pub name: String,
 }
 
-/// 選択UIやブラウザ選択コンボに並べる1項目
 #[derive(Clone)]
 pub struct Choice {
     pub bundle_id: String,
@@ -65,8 +63,6 @@ pub fn discover(own_bundle_id: &str) -> Vec<Browser> {
     })
 }
 
-/// 検出したすべてのブラウザ・プロファイル。
-/// プロファイルを持つブラウザは「最後に使ったプロファイルで開く」項目も先頭に含める
 pub fn all_choices(browsers: &[Browser]) -> Vec<Choice> {
     let mut out = Vec::new();
     for b in browsers {
@@ -90,7 +86,6 @@ pub fn all_choices(browsers: &[Browser]) -> Vec<Choice> {
     out
 }
 
-/// 選択UIに実際に並べる項目
 pub fn picker_choices(browsers: &[Browser], items: Option<&[Target]>) -> Vec<Choice> {
     let Some(items) = items else {
         return all_choices(browsers);
@@ -102,8 +97,6 @@ pub fn picker_choices(browsers: &[Browser], items: Option<&[Target]>) -> Vec<Cho
         .collect()
 }
 
-/// 設定画面に並べる (表示するもの, 表示しないもの)。
-/// 表示しないものは all の順 (= ブラウザ名順) に並ぶ
 pub fn picker_partition(all: &[Choice], items: Option<&[Target]>) -> (Vec<Target>, Vec<Target>) {
     let shown: Vec<Target> = match items {
         Some(items) => items.to_vec(),

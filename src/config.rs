@@ -6,13 +6,10 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Config {
-    /// どのルールにもマッチしなかったときの動作
     #[serde(default)]
     pub default: Action,
-    /// Fnキーを押しながら開いたときの動作。ルールより優先する
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub alternative: Option<Action>,
-    /// 選択UIに並べるブラウザと順番。未設定なら検出したものをすべて表示する
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub picker_items: Option<Vec<Target>>,
     #[serde(default)]
@@ -23,13 +20,10 @@ pub struct Config {
 pub struct Rule {
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub name: String,
-    /// ホスト名に対するglob (`*` のみ対応)。いずれかにマッチすればよい
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub hosts: Vec<String>,
-    /// URL全体に対するglob。いずれかにマッチすればよい
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub urls: Vec<String>,
-    /// リンクを開いたアプリのバンドルID。いずれかに一致すればよい
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub source_apps: Vec<String>,
     pub action: Action,
@@ -52,7 +46,6 @@ pub enum Action {
 #[derive(Debug, Clone, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct Target {
     pub bundle_id: String,
-    /// Chromium系ブラウザのプロファイルディレクトリ名 (例: "Default", "Profile 1")
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub profile: Option<String>,
 }
@@ -129,7 +122,6 @@ impl ConfigStore {
         &self.config
     }
 
-    /// 今回の起動で設定ファイルを新規作成した (= 初回起動)
     pub fn created(&self) -> bool {
         self.created
     }

@@ -19,7 +19,6 @@ const TILE_PADDING: Margin = Margin {
 };
 const GAP: f32 = 2.0;
 const PADDING: i8 = 12;
-/// URL行 (13pt) とその下の余白
 const HEADER_HEIGHT: f32 = 28.0;
 const MAX_COLUMNS: usize = 6;
 const MIN_WIDTH: f32 = 280.0;
@@ -199,7 +198,6 @@ fn subdued(p: Palette) -> Color32 {
     p.text.gamma_multiply(0.62)
 }
 
-/// ホストを強調し、残りのURLを薄く表示する1行
 fn url_line(url: &str, p: Palette) -> LayoutJob {
     let rest = url.split_once("://").map_or(url, |(_, r)| r);
     let split = rest.find(['/', '?', '#']).unwrap_or(rest.len());

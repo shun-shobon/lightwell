@@ -23,11 +23,8 @@ pub enum Mode {
 pub struct Core {
     pub store: ConfigStore,
     pub browsers: Vec<Browser>,
-    /// 検出したすべてのブラウザ・プロファイル (設定画面のコンボ用)
     pub all_choices: Vec<Choice>,
-    /// 選択UIに並べる項目 (設定の picker_items を反映)
     pub picker_choices: Vec<Choice>,
-    /// ブラウザ一覧を再取得した回数。アイコンのテクスチャを作り直す判定に使う
     pub browsers_rev: u64,
     pub pending: Option<Request>,
     pub mode: Mode,
@@ -309,8 +306,6 @@ impl eframe::App for App {
     }
 }
 
-/// 見た目の確認用。LIGHTWELL_PREVIEW=picker|settings[:general|picker|rules|rule] で起動直後に表示し、
-/// screencapture -l に渡すウィンドウ番号を標準エラーに出す
 #[cfg(debug_assertions)]
 fn preview(core: &SharedCore) {
     let Ok(target) = std::env::var("LIGHTWELL_PREVIEW") else {
