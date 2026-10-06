@@ -271,13 +271,18 @@ pub fn open_url(
     };
 
     let profile_arg = format!("--profile-directory={profile}");
+    if let Some(dir) = crate::browsers::chromium_user_data_dir(bundle_id)
+        && notify_chromium_singleton(&dir, app_path, &[&profile_arg, url]).is_ok()
+    {
+        return Ok(());
+    }
     let running = !NSRunningApplication::runningApplicationsWithBundleIdentifier(
         &NSString::from_str(bundle_id),
     )
     .is_empty();
     if running {
-        // 起動中のChromiumは、引数付きで実行された2つ目のプロセスからURLとプロファイルを受け取って即終了させる。
-        // LaunchServices経由 (open -na 相当) より速い
+        // ソケットに送れなかった場合の予備。LaunchServices経由 (open -na 相当) より速いが、
+        // 巨大なFrameworkの読み込みで数秒かかることがある
         let executable = NSBundle::bundleWithURL(&app_url)
             .and_then(|b| b.executableURL())
             .and_then(|u| u.path())
@@ -301,6 +306,30 @@ pub fn open_url(
         workspace.openApplicationAtURL_configuration_completionHandler(&app_url, &config, None);
     }
     Ok(())
+}
+
+/// 起動中のChromiumの SingletonSocket に、2つ目のプロセスが送るのと同じコマンドラインを直接渡す。
+/// 2つ目のプロセスを起動すると更新直後やキャッシュ追い出し後に数秒かかるため。
+/// ACKはUIスレッドの処理後に返るので、メインスレッドを止めないよう待たない
+fn notify_chromium_singleton(
+    user_data_dir: &Path,
+    app_path: &Path,
+    args: &[&str],
+) -> std::io::Result<()> {
+    use std::io::Write;
+    use std::os::unix::ffi::OsStrExt;
+
+    let mut msg = b"START\0/".to_vec();
+    msg.push(0);
+    msg.extend_from_slice(app_path.as_os_str().as_bytes());
+    for arg in args {
+        msg.push(0);
+        msg.extend_from_slice(arg.as_bytes());
+    }
+    let mut stream =
+        std::os::unix::net::UnixStream::connect(user_data_dir.join("SingletonSocket"))?;
+    stream.write_all(&msg)?;
+    stream.shutdown(std::net::Shutdown::Write)
 }
 
 pub fn reveal_in_finder(path: &Path) {

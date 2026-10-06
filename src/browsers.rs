@@ -160,8 +160,8 @@ fn app_display_name(path: &Path) -> String {
         .unwrap_or_default()
 }
 
-fn chromium_user_data_dir(bundle_id: &str) -> Option<&'static str> {
-    Some(match bundle_id {
+pub fn chromium_user_data_dir(bundle_id: &str) -> Option<PathBuf> {
+    let dir = match bundle_id {
         "com.google.Chrome" => "Google/Chrome",
         "com.google.Chrome.beta" => "Google/Chrome Beta",
         "com.google.Chrome.dev" => "Google/Chrome Dev",
@@ -175,19 +175,16 @@ fn chromium_user_data_dir(bundle_id: &str) -> Option<&'static str> {
         "com.microsoft.edgemac.Dev" => "Microsoft Edge Dev",
         "com.vivaldi.Vivaldi" => "Vivaldi",
         _ => return None,
-    })
+    };
+    let home = PathBuf::from(std::env::var_os("HOME").unwrap_or_default());
+    Some(home.join("Library/Application Support").join(dir))
 }
 
 fn chromium_profiles(bundle_id: &str) -> Vec<Profile> {
     let Some(dir) = chromium_user_data_dir(bundle_id) else {
         return Vec::new();
     };
-    let home = PathBuf::from(std::env::var_os("HOME").unwrap_or_default());
-    let local_state = home
-        .join("Library/Application Support")
-        .join(dir)
-        .join("Local State");
-    std::fs::read(local_state)
+    std::fs::read(dir.join("Local State"))
         .ok()
         .map(|bytes| parse_local_state(&bytes))
         .unwrap_or_default()
