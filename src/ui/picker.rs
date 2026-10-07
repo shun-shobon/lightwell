@@ -1,217 +1,97 @@
-use eframe::egui::{
-    self, Align, Align2, Color32, CornerRadius, Frame, Key, Margin, RichText, Sense, Ui, Vec2,
-    text::{LayoutJob, TextFormat},
-    vec2,
-};
-use egui_flex::{Flex, FlexAlign, FlexInstance, FlexJustify, item};
+use dioxus::prelude::*;
 
-use super::Textures;
-use super::theme::{Palette, Typography};
-use super::widgets::fitted_text;
+use super::icons::Icon;
 use crate::browsers::Choice;
 
-const TILE: Vec2 = vec2(100.0, 104.0);
-const TILE_PADDING: Margin = Margin {
-    left: 4,
-    right: 4,
-    top: 10,
-    bottom: 6,
-};
-const GAP: f32 = 2.0;
-const PADDING: i8 = 12;
-const HEADER_HEIGHT: f32 = 28.0;
+const TILE_WIDTH: usize = 100;
+const TILE_HEIGHT: usize = 104;
+const GAP: usize = 2;
+const PADDING: usize = 12;
+const URL_HEIGHT: usize = 28;
 const MAX_COLUMNS: usize = 6;
-const MIN_WIDTH: f32 = 280.0;
-const ICON: f32 = 52.0;
+const MIN_WIDTH: usize = 280;
 
 /// ウィンドウは表示前に AppKit 側でサイズを決めるので、中身の大きさをここで見積もる
 pub fn window_size(count: usize) -> (f64, f64) {
-    let cols = count.clamp(1, MAX_COLUMNS) as f32;
-    let rows = count.div_ceil(MAX_COLUMNS).max(1) as f32;
-    let padding = PADDING as f32 * 2.0;
-    let w = padding + cols * TILE.x + (cols - 1.0) * GAP;
-    let h = padding + HEADER_HEIGHT + rows * TILE.y + (rows - 1.0) * GAP;
+    let cols = count.clamp(1, MAX_COLUMNS);
+    let rows = count.div_ceil(MAX_COLUMNS).max(1);
+    let w = PADDING * 2 + cols * TILE_WIDTH + (cols - 1) * GAP;
+    let h = PADDING * 2 + URL_HEIGHT + rows * TILE_HEIGHT + (rows - 1) * GAP;
     (w.max(MIN_WIDTH) as f64, h as f64)
 }
 
-#[derive(Default)]
-pub struct PickerState {
-    selected: usize,
-    seen_focus: bool,
+#[derive(Clone, PartialEq)]
+pub struct PickerRequest {
+    pub url: String,
+    pub choices: Vec<Choice>,
 }
 
-pub enum Outcome {
-    Choose(usize),
-    Cancel,
-}
+/// 選んだ選択肢の番号、キャンセルなら None で `on_done` を呼ぶ
+#[component]
+pub fn Picker(request: PickerRequest, on_done: EventHandler<Option<usize>>) -> Element {
+    let mut selected = use_signal(|| 0);
+    let count = request.choices.len();
+    let cols = count.clamp(1, MAX_COLUMNS);
 
-pub fn show(
-    ui: &mut Ui,
-    state: &mut PickerState,
-    url: &str,
-    choices: &[Choice],
-    textures: &mut Textures,
-) -> Option<Outcome> {
-    let count = choices.len();
-    let mut outcome = handle_keys(ui, state, count, count.clamp(1, MAX_COLUMNS));
-    let p = Palette::of(ui);
-    Frame::new()
-        .inner_margin(Margin::same(PADDING))
-        .show(ui, |ui| {
-            ui.set_width(ui.available_width());
-            Frame::new()
-                .inner_margin(Margin {
-                    left: 4,
-                    right: 4,
-                    top: 0,
-                    bottom: 8,
-                })
-                .show(ui, |ui| {
-                    ui.add(egui::Label::new(url_line(url, p)).truncate())
-                });
-            if count == 0 {
-                ui.label(RichText::new("ブラウザが見つかりません").color(p.secondary));
-                return;
+    let onkeydown = move |e: KeyboardEvent| {
+        let s = selected();
+        match e.key() {
+            Key::Escape => on_done(None),
+            _ if count == 0 => return,
+            Key::Enter => on_done(Some(s)),
+            Key::Character(c) if c == " " => on_done(Some(s)),
+            Key::ArrowRight | Key::Tab => selected.set((s + 1) % count),
+            Key::ArrowLeft => selected.set((s + count - 1) % count),
+            Key::ArrowDown if s + cols < count => selected.set(s + cols),
+            Key::ArrowUp if s >= cols => selected.set(s - cols),
+            Key::Character(c) => match c.parse::<usize>() {
+                Ok(n @ 1..=9) if n <= count => on_done(Some(n - 1)),
+                _ => return,
+            },
+            _ => return,
+        }
+        e.prevent_default();
+    };
+
+    let (host, path) = split_url(&request.url);
+    rsx! {
+        div {
+            class: "picker",
+            style: "padding: {PADDING}px",
+            tabindex: 0,
+            onmounted: move |e| async move { _ = e.set_focus(true).await },
+            onkeydown,
+            div { class: "picker-url", style: "height: {URL_HEIGHT}px",
+                span { class: "host", "{host}" }
+                span { class: "path", "{path}" }
             }
-            Flex::horizontal()
-                .w_full()
-                .wrap(true)
-                .justify(FlexJustify::Center)
-                .gap(Vec2::splat(GAP))
-                .show(ui, |f| {
-                    for (n, choice) in choices.iter().enumerate() {
-                        let icon = textures.browser_icon(f.ui().ctx(), &choice.bundle_id);
-                        let tile = tile(f, choice, icon.as_ref(), n == state.selected, p);
-                        if tile.hovered() && f.ui().input(|i| i.pointer.delta() != Vec2::ZERO) {
-                            state.selected = n;
-                        }
-                        if tile.clicked() {
-                            outcome = Some(Outcome::Choose(n));
+            if count == 0 {
+                p { class: "secondary", "ブラウザが見つかりません" }
+            }
+            div {
+                class: "tiles",
+                style: "grid-template-columns: repeat({cols}, {TILE_WIDTH}px); grid-auto-rows: {TILE_HEIGHT}px; gap: {GAP}px",
+                for (n, choice) in request.choices.into_iter().enumerate() {
+                    div {
+                        class: if n == selected() { "tile selected" } else { "tile" },
+                        onmousemove: move |_| selected.set(n),
+                        onclick: move |_| on_done(Some(n)),
+                        Icon { src: choice.icon, size: 52 }
+                        span { class: "name", "{choice.browser_name}" }
+                        if let Some(profile) = choice.profile_name {
+                            span { class: "profile", "{profile}" }
                         }
                         if n < 9 {
-                            f.painter().text(
-                                tile.rect.right_top() + vec2(-8.0, 6.0),
-                                Align2::RIGHT_TOP,
-                                (n + 1).to_string(),
-                                Typography::Footnote.font(),
-                                subdued(p),
-                            );
+                            span { class: "key", "{n + 1}" }
                         }
                     }
-                });
-        });
-    outcome
-}
-
-fn handle_keys(ui: &Ui, state: &mut PickerState, count: usize, cols: usize) -> Option<Outcome> {
-    let mut outcome = None;
-    ui.input(|i| {
-        if i.key_pressed(Key::Escape) {
-            outcome = Some(Outcome::Cancel);
-        }
-        if count > 0 {
-            let s = state.selected;
-            if i.key_pressed(Key::ArrowRight) || i.key_pressed(Key::Tab) {
-                state.selected = (s + 1) % count;
-            }
-            if i.key_pressed(Key::ArrowLeft) {
-                state.selected = (s + count - 1) % count;
-            }
-            if i.key_pressed(Key::ArrowDown) && s + cols < count {
-                state.selected = s + cols;
-            }
-            if i.key_pressed(Key::ArrowUp) && s >= cols {
-                state.selected = s - cols;
-            }
-            if i.key_pressed(Key::Enter) || i.key_pressed(Key::Space) {
-                outcome = Some(Outcome::Choose(state.selected));
+                }
             }
         }
-        let digits = [
-            Key::Num1,
-            Key::Num2,
-            Key::Num3,
-            Key::Num4,
-            Key::Num5,
-            Key::Num6,
-            Key::Num7,
-            Key::Num8,
-            Key::Num9,
-        ];
-        for (n, key) in digits.iter().enumerate() {
-            if i.key_pressed(*key) && n < count {
-                outcome = Some(Outcome::Choose(n));
-            }
-        }
-        match i.viewport().focused {
-            Some(true) => state.seen_focus = true,
-            Some(false) if state.seen_focus => outcome = Some(Outcome::Cancel),
-            _ => {}
-        }
-    });
-    outcome
+    }
 }
 
-fn tile(
-    f: &mut FlexInstance,
-    choice: &Choice,
-    icon: Option<&egui::TextureHandle>,
-    selected: bool,
-    p: Palette,
-) -> egui::Response {
-    let frame = Frame::new()
-        .fill(if selected {
-            p.hover
-        } else {
-            Color32::TRANSPARENT
-        })
-        .corner_radius(CornerRadius::same(10))
-        .inner_margin(TILE_PADDING);
-    let content_width = TILE.x - (TILE_PADDING.left + TILE_PADDING.right) as f32;
-    f.add_flex(
-        item().frame(frame).min_size(TILE).sense(Sense::click()),
-        Flex::vertical()
-            .width(content_width)
-            .align_items(FlexAlign::Stretch)
-            .gap(vec2(0.0, 1.0)),
-        |f| {
-            f.add_widget(
-                item().align_self(FlexAlign::Center),
-                super::widgets::icon(icon, ICON),
-            );
-            f.add_ui(item().min_height(4.0), |_| {});
-            let name = RichText::new(&choice.browser_name).text_style(Typography::Callout.style());
-            f.add_widget(item(), fitted_text(name.into(), Align::Center));
-            if let Some(profile) = &choice.profile_name {
-                let profile = RichText::new(profile)
-                    .text_style(Typography::Subheadline.style())
-                    .color(subdued(p));
-                f.add_widget(item(), fitted_text(profile.into(), Align::Center));
-            }
-        },
-    )
-    .response
-}
-
-/// すりガラスの上では通常の secondary だと沈むので、本文色を薄めて使う
-fn subdued(p: Palette) -> Color32 {
-    p.text.gamma_multiply(0.62)
-}
-
-fn url_line(url: &str, p: Palette) -> LayoutJob {
+fn split_url(url: &str) -> (&str, &str) {
     let rest = url.split_once("://").map_or(url, |(_, r)| r);
-    let split = rest.find(['/', '?', '#']).unwrap_or(rest.len());
-    let (host, path) = rest.split_at(split);
-    let mut job = LayoutJob::default();
-    job.append(
-        host,
-        0.0,
-        TextFormat::simple(Typography::Headline.font(), p.text),
-    );
-    job.append(
-        path,
-        0.0,
-        TextFormat::simple(Typography::Callout.font(), p.secondary),
-    );
-    job
+    rest.split_at(rest.find(['/', '?', '#']).unwrap_or(rest.len()))
 }

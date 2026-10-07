@@ -1,0 +1,367 @@
+:root {
+  color-scheme: light dark;
+  --accent: -apple-system-control-accent;
+  --window: #f2f2f2;
+  --group: #fcfcfc;
+  --group-stroke: rgb(0 0 0 / 5.5%);
+  --separator: rgb(0 0 0 / 8%);
+  --text: #1d1d1f;
+  --secondary: #6e6e73;
+  --tertiary: #a0a0a5;
+  --hover: rgb(0 0 0 / 7%);
+  --destructive: #ff3b30;
+  --warning: #e68c14;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --window: #1e1e1e;
+    --group: #282828;
+    --group-stroke: rgb(255 255 255 / 5.5%);
+    --separator: rgb(255 255 255 / 7%);
+    --text: #ebebf0;
+    --secondary: #98989d;
+    --tertiary: #646469;
+    --hover: rgb(255 255 255 / 9%);
+    --destructive: #ff453a;
+  }
+}
+
+/* 背面のすりガラス (NSVisualEffectView) を透かす */
+html,
+body,
+#main {
+  height: 100%;
+  margin: 0;
+  background: transparent;
+}
+
+body {
+  font: 13px -apple-system, sans-serif;
+  color: var(--text);
+  -webkit-user-select: none;
+  cursor: default;
+  overflow: hidden;
+}
+
+h1,
+h2,
+p {
+  margin: 0;
+}
+
+button,
+input,
+select {
+  font: inherit;
+}
+
+.secondary {
+  color: var(--secondary);
+}
+
+.tertiary {
+  color: var(--tertiary);
+}
+
+.warning {
+  color: var(--warning);
+}
+
+.truncate {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.grow {
+  flex: 1;
+  min-width: 0;
+}
+
+.icon {
+  flex: none;
+}
+
+.symbol {
+  display: inline-block;
+  flex: none;
+  background: currentColor;
+  -webkit-mask-size: contain;
+  -webkit-mask-repeat: no-repeat;
+  -webkit-mask-position: center;
+}
+
+/* 選択UI */
+
+.picker {
+  outline: none;
+}
+
+.picker-url {
+  box-sizing: border-box;
+  padding: 0 4px 8px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.picker-url .host {
+  font-weight: 600;
+}
+
+.picker-url .path {
+  font-size: 12px;
+  color: var(--secondary);
+}
+
+.tiles {
+  display: grid;
+  justify-content: center;
+}
+
+.tile {
+  position: relative;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  padding: 10px 4px 6px;
+  border-radius: 10px;
+}
+
+.tile.selected {
+  background: var(--hover);
+}
+
+.tile .icon {
+  margin-bottom: 4px;
+}
+
+.tile .name,
+.tile .profile {
+  max-width: 100%;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.tile .name {
+  font-size: 12px;
+}
+
+/* すりガラスの上では --secondary だと沈むので、本文色を薄めて使う */
+.tile .profile,
+.tile .key {
+  color: var(--text);
+  opacity: 0.62;
+}
+
+.tile .profile {
+  font-size: 11px;
+}
+
+.tile .key {
+  position: absolute;
+  top: 6px;
+  right: 8px;
+  font-size: 10px;
+}
+
+/* 設定画面 */
+
+.settings {
+  display: flex;
+  height: 100%;
+}
+
+.titlebar {
+  flex: none;
+  height: 52px;
+}
+
+.sidebar {
+  flex: none;
+  width: 200px;
+  box-sizing: border-box;
+  padding: 0 10px;
+}
+
+.nav {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 2px;
+  padding: 5px 6px;
+  border-radius: 6px;
+}
+
+.nav.selected {
+  background: var(--accent);
+  color: white;
+}
+
+.badge {
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 5px;
+  color: white;
+}
+
+.content {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--window);
+}
+
+.content .titlebar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 20px;
+}
+
+h1 {
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.page {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0 20px 24px;
+}
+
+h2 {
+  padding: 14px 12px 2px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.group {
+  padding: 0 12px;
+  border: 1px solid var(--group-stroke);
+  border-radius: 10px;
+  background: var(--group);
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 22px;
+  padding: 8px 0;
+}
+
+.row + .row {
+  border-top: 1px solid var(--separator);
+}
+
+.handle {
+  display: flex;
+  flex: none;
+  width: 12px;
+  color: var(--tertiary);
+  cursor: grab;
+}
+
+.row.dragging {
+  opacity: 0.45;
+}
+
+.row.clickable:hover {
+  background: var(--hover);
+  margin: 0 -6px;
+  padding: 8px 6px;
+  border-radius: 6px;
+}
+
+.detail {
+  font-size: 11px;
+  color: var(--secondary);
+}
+
+.footnote {
+  padding: 4px 12px 0;
+  font-size: 11px;
+  color: var(--secondary);
+}
+
+.error,
+p.warning {
+  padding: 8px 12px 0;
+  font-size: 11px;
+  white-space: pre-wrap;
+}
+
+.error {
+  color: var(--destructive);
+}
+
+input[type="text"] {
+  padding: 3px 6px;
+  border: 1px solid var(--separator);
+  border-radius: 5px;
+  background: var(--window);
+  color: var(--text);
+  outline: none;
+}
+
+input[type="text"]:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 35%, transparent);
+}
+
+input.name {
+  width: 260px;
+}
+
+input[type="checkbox"] {
+  margin: 0;
+  accent-color: var(--accent);
+}
+
+.icon-button,
+.link,
+.add {
+  padding: 0;
+  border: none;
+  background: none;
+}
+
+.icon-button {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 5px;
+  color: var(--secondary);
+}
+
+.icon-button:hover {
+  background: var(--hover);
+}
+
+.link,
+.add {
+  color: var(--accent);
+}
+
+select.link {
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+.add {
+  margin: 10px 12px 0;
+}
+
+.destructive {
+  margin-top: 20px;
+  color: var(--destructive);
+}

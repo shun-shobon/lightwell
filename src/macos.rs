@@ -8,22 +8,19 @@ use objc2::{
     AnyThread, DefinedClass, MainThreadMarker, MainThreadOnly, define_class, msg_send, sel,
 };
 use objc2_app_kit::{
-    NSApplication, NSApplicationActivationPolicy, NSAutoresizingMaskOptions, NSBitmapImageRep,
-    NSColor, NSColorSpace, NSCompositingOperation, NSDeviceRGBColorSpace, NSEvent,
-    NSEventModifierFlags, NSFont, NSFontWeightRegular, NSFontWeightSemibold, NSGraphicsContext,
-    NSImage, NSMenu, NSMenuItem, NSOpenPanel, NSRunningApplication, NSScreen, NSStatusBar,
-    NSStatusItem, NSView, NSVisualEffectBlendingMode, NSVisualEffectMaterial, NSVisualEffectState,
-    NSVisualEffectView, NSWindow, NSWindowOrderingMode, NSWindowStyleMask, NSWindowTitleVisibility,
+    NSApplication, NSApplicationActivationPolicy, NSAutoresizingMaskOptions, NSBitmapImageFileType,
+    NSBitmapImageRep, NSColor, NSCompositingOperation, NSDeviceRGBColorSpace, NSEvent,
+    NSEventModifierFlags, NSGraphicsContext, NSImage, NSMenu, NSMenuItem, NSOpenPanel,
+    NSRunningApplication, NSScreen, NSStatusBar, NSStatusItem, NSVisualEffectBlendingMode,
+    NSVisualEffectMaterial, NSVisualEffectState, NSVisualEffectView, NSWindow,
+    NSWindowCollectionBehavior, NSWindowOrderingMode, NSWindowStyleMask, NSWindowTitleVisibility,
     NSWorkspace, NSWorkspaceOpenConfiguration,
 };
-use objc2_core_foundation::{CFNumber, CFRange, CFString, CFURL};
-use objc2_core_text::{CTFont, kCTFontURLAttribute};
 use objc2_foundation::{
-    NSActivityOptions, NSAppleEventDescriptor, NSAppleEventManager, NSArray, NSBundle, NSError,
-    NSFileManager, NSPoint, NSProcessInfo, NSRect, NSSize, NSString, NSURL,
+    NSActivityOptions, NSAppleEventDescriptor, NSAppleEventManager, NSArray, NSBundle,
+    NSDictionary, NSError, NSFileManager, NSPoint, NSProcessInfo, NSRect, NSSize, NSString, NSURL,
 };
 use objc2_service_management::{SMAppService, SMAppServiceStatus};
-use raw_window_handle::{HasWindowHandle, RawWindowHandle};
 
 pub const FALLBACK_BUNDLE_ID: &str = "tech.s2n.lightwell";
 
@@ -221,6 +218,7 @@ pub fn bundle_id_of_pid(pid: i32) -> Option<String> {
         .map(|s| s.to_string())
 }
 
+#[derive(Clone)]
 pub struct RunningApp {
     pub name: String,
     pub bundle_id: String,
@@ -366,14 +364,9 @@ pub fn set_as_default_browser() {
     );
 }
 
-pub fn ns_window(handle: &impl HasWindowHandle) -> Option<Retained<NSWindow>> {
-    match handle.window_handle().ok()?.as_raw() {
-        RawWindowHandle::AppKit(h) => {
-            let view: &NSView = unsafe { h.ns_view.cast().as_ref() };
-            view.window()
-        }
-        _ => None,
-    }
+pub fn ns_window(window: &dioxus::desktop::tao::window::Window) -> Retained<NSWindow> {
+    use dioxus::desktop::tao::platform::macos::WindowExtMacOS;
+    unsafe { Retained::retain(window.ns_window().cast()) }.expect("NSWindow")
 }
 
 const NORMAL_WINDOW_LEVEL: isize = 0;
@@ -384,8 +377,8 @@ thread_local! {
     static BACKDROP: RefCell<Option<Retained<NSVisualEffectView>>> = const { RefCell::new(None) };
 }
 
-/// GLで描くeguiの背面に、すりガラス (NSVisualEffectView) を敷く。
-/// contentView (winitのビュー) の子にするとGLの描画を覆ってしまうので、contentView の兄弟として背面に置く。
+/// 透過させたWebViewの背面に、すりガラス (NSVisualEffectView) を敷く。
+/// contentView (taoのビュー) の子にするとWebViewを覆ってしまうので、contentView の兄弟として背面に置く。
 /// styleMask を変えると親のフレームビューが差し替わるので、その都度付け直す
 fn install_backdrop(window: &NSWindow, material: NSVisualEffectMaterial, corner_radius: f64) {
     let Some(content) = window.contentView() else {
@@ -427,10 +420,17 @@ fn install_backdrop(window: &NSWindow, material: NSVisualEffectMaterial, corner_
     window.setBackgroundColor(Some(&NSColor::clearColor()));
 }
 
+/// 既定では最後に表示した仮想デスクトップにウィンドウが残り、表示するとそこへ切り替わってしまう。
+/// 選択UIだとその切り替えでフォーカスが外れ、キャンセル扱いになる
+fn stay_on_active_space(window: &NSWindow) {
+    window.setCollectionBehavior(NSWindowCollectionBehavior::MoveToActiveSpace);
+}
+
 pub fn show_picker(window: &NSWindow, size: (f64, f64)) {
     let mtm = window.mtm();
     window.setStyleMask(NSWindowStyleMask::Borderless);
     window.setLevel(POP_UP_MENU_WINDOW_LEVEL);
+    stay_on_active_space(window);
     window.setHasShadow(true);
     window.setContentSize(NSSize::new(size.0, size.1));
     install_backdrop(window, NSVisualEffectMaterial::Menu, PICKER_CORNER_RADIUS);
@@ -474,6 +474,7 @@ pub fn show_settings(window: &NSWindow, size: (f64, f64), min_size: (f64, f64)) 
     window.setTitleVisibility(NSWindowTitleVisibility::Hidden);
     window.setTitle(&NSString::from_str("Lightwell"));
     window.setLevel(NORMAL_WINDOW_LEVEL);
+    stay_on_active_space(window);
     window.setHasShadow(true);
     window.setContentMinSize(NSSize::new(min_size.0, min_size.1));
     window.setContentSize(NSSize::new(size.0, size.1));
@@ -482,15 +483,6 @@ pub fn show_settings(window: &NSWindow, size: (f64, f64), min_size: (f64, f64)) 
     activate(mtm);
     window.setAlphaValue(1.0);
     window.makeKeyAndOrderFront(None);
-}
-
-/// eframeは最初の描画後にウィンドウを強制的に表示するので、透明にしておいて表示直後に隠す
-pub fn conceal_initial_window(window: &NSWindow) {
-    window.setAlphaValue(0.0);
-}
-
-pub fn order_out(window: &NSWindow) {
-    window.orderOut(None);
 }
 
 /// 選択UIを閉じた後、リンクを開いた元のアプリにフォーカスを戻すため hide する
@@ -534,22 +526,8 @@ pub fn open_login_items_settings() {
     unsafe { SMAppService::openSystemSettingsLoginItems() };
 }
 
-pub fn accent_color() -> [u8; 3] {
-    let fallback = [10, 130, 255];
-    let Some(color) =
-        NSColor::controlAccentColor().colorUsingColorSpace(&NSColorSpace::sRGBColorSpace())
-    else {
-        return fallback;
-    };
-    let c = |v: f64| (v.clamp(0.0, 1.0) * 255.0).round() as u8;
-    [
-        c(color.redComponent()),
-        c(color.greenComponent()),
-        c(color.blueComponent()),
-    ]
-}
-
-pub fn rasterize(image: &NSImage, px: usize) -> Option<Vec<u8>> {
+/// WebView に data URL で渡すため PNG にする
+fn png(image: &NSImage, px: usize) -> Option<Vec<u8>> {
     let size = px as isize;
     let rep = unsafe {
         NSBitmapImageRep::initWithBitmapDataPlanes_pixelsWide_pixelsHigh_bitsPerSample_samplesPerPixel_hasAlpha_isPlanar_colorSpaceName_bytesPerRow_bitsPerPixel(
@@ -586,50 +564,33 @@ pub fn rasterize(image: &NSImage, px: usize) -> Option<Vec<u8>> {
     ctx.flushGraphics();
     NSGraphicsContext::restoreGraphicsState_class();
 
-    let data = rep.bitmapData();
-    if data.is_null() {
-        return None;
-    }
-    let len = (rep.bytesPerRow() * size) as usize;
-    Some(unsafe { std::slice::from_raw_parts(data, len) }.to_vec())
+    let data = unsafe {
+        rep.representationUsingType_properties(NSBitmapImageFileType::PNG, &NSDictionary::new())
+    }?;
+    Some(data.to_vec())
 }
 
 pub fn app_icon(path: &Path, px: usize) -> Option<Vec<u8>> {
     let image =
         NSWorkspace::sharedWorkspace().iconForFile(&NSString::from_str(&path.to_string_lossy()));
-    rasterize(&image, px)
+    png(&image, px)
 }
 
-/// SF Symbols を白で描いたRGBA。eguiの tint で好きな色にできる
+/// SF Symbols は黒で描かれるが、CSS の mask として使うので色は問わない
 pub fn symbol(name: &str, px: usize) -> Option<Vec<u8>> {
     let image = NSImage::imageWithSystemSymbolName_accessibilityDescription(
         &NSString::from_str(name),
         None,
     )?;
-    let mut rgba = rasterize(&image, px)?;
-    for pixel in rgba.chunks_exact_mut(4) {
-        let a = pixel[3];
-        pixel[0] = a;
-        pixel[1] = a;
-        pixel[2] = a;
-    }
-    Some(rgba)
+    png(&image, px)
 }
 
-pub struct AppInfo {
-    pub name: String,
-    pub path: PathBuf,
-}
-
-pub fn app_info(bundle_id: &str) -> Option<AppInfo> {
+pub fn app_name(bundle_id: &str) -> Option<String> {
     let path = app_path_for_bundle_id(bundle_id)?;
     let name = NSFileManager::defaultManager()
         .displayNameAtPath(&NSString::from_str(&path.to_string_lossy()))
         .to_string();
-    Some(AppInfo {
-        name: name.trim_end_matches(".app").to_owned(),
-        path,
-    })
+    Some(name.trim_end_matches(".app").to_owned())
 }
 
 #[allow(deprecated)]
@@ -665,99 +626,4 @@ pub fn force_light_appearance() {
         objc2_app_kit::NSAppearanceNameAqua
     });
     NSApplication::sharedApplication(mtm).setAppearance(appearance.as_deref());
-}
-
-#[cfg(debug_assertions)]
-pub fn window_number(window: &NSWindow) -> isize {
-    window.windowNumber()
-}
-
-pub struct FontFace {
-    pub bytes: Vec<u8>,
-    pub index: u32,
-    pub variation: Vec<([u8; 4], f32)>,
-}
-
-pub struct UiFonts {
-    pub regular: Option<FontFace>,
-    pub semibold: Option<FontFace>,
-    pub japanese: Option<FontFace>,
-    pub japanese_semibold: Option<FontFace>,
-}
-
-pub fn ui_fonts(size: f64) -> UiFonts {
-    let regular = NSFont::systemFontOfSize_weight(size, unsafe { NSFontWeightRegular });
-    let semibold = NSFont::systemFontOfSize_weight(size, unsafe { NSFontWeightSemibold });
-    let (regular, semibold) = (as_ct_font(&regular), as_ct_font(&semibold));
-    UiFonts {
-        regular: font_face(regular),
-        semibold: font_face(semibold),
-        japanese: font_face(&fallback_for(regular, "あ", "ja")),
-        japanese_semibold: font_face(&fallback_for(semibold, "あ", "ja")),
-    }
-}
-
-fn as_ct_font(font: &NSFont) -> &CTFont {
-    // NSFont と CTFont は toll-free bridged
-    unsafe { &*(font as *const NSFont).cast::<CTFont>() }
-}
-
-fn fallback_for(
-    font: &CTFont,
-    text: &str,
-    language: &str,
-) -> objc2_core_foundation::CFRetained<CTFont> {
-    let text = CFString::from_str(text);
-    let range = CFRange {
-        location: 0,
-        length: text.length(),
-    };
-    unsafe { font.for_string_with_language(&text, range, Some(&CFString::from_str(language))) }
-}
-
-fn font_face(font: &CTFont) -> Option<FontFace> {
-    let url = unsafe { font.attribute(kCTFontURLAttribute) }?
-        .downcast::<CFURL>()
-        .ok()?;
-    let bytes = std::fs::read(url.to_file_path()?).ok()?;
-    let postscript_name = unsafe { font.post_script_name() }.to_string();
-    let index = face_index(&bytes, &postscript_name).unwrap_or(0);
-    Some(FontFace {
-        bytes,
-        index,
-        variation: variation(font),
-    })
-}
-
-/// .ttc には複数の書体が入っているので、PostScript 名で目的の書体を探す
-fn face_index(bytes: &[u8], postscript_name: &str) -> Option<u32> {
-    use skrifa::MetadataProvider;
-    let file = skrifa::raw::FileRef::new(bytes).ok()?;
-    file.fonts()
-        .position(|font| {
-            font.ok()
-                .and_then(|font| {
-                    font.localized_strings(skrifa::string::StringId::POSTSCRIPT_NAME)
-                        .english_or_first()
-                        .map(|name| name.to_string() == postscript_name)
-                })
-                .unwrap_or(false)
-        })
-        .map(|i| i as u32)
-}
-
-fn variation(font: &CTFont) -> Vec<([u8; 4], f32)> {
-    let Some(dict) = (unsafe { font.variation() }) else {
-        return Vec::new();
-    };
-    let dict = unsafe { dict.cast_unchecked::<CFNumber, objc2_core_foundation::CFType>() };
-    let (keys, values) = dict.to_vecs();
-    keys.iter()
-        .zip(values)
-        .filter_map(|(axis, value)| {
-            let tag = (axis.as_i64()? as u32).to_be_bytes();
-            let value = value.downcast::<CFNumber>().ok()?.as_f64()? as f32;
-            Some((tag, value))
-        })
-        .collect()
 }

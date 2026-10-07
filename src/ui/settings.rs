@@ -1,24 +1,16 @@
-use std::time::{Duration, Instant};
+use dioxus::prelude::*;
+use objc2::MainThreadMarker;
 
-use eframe::egui::{self, Color32, CornerRadius, Frame, Id, Margin, RichText, Sense, Ui, vec2};
-use egui_flex::{Flex, FlexAlign, FlexInstance, item};
-
-use super::Textures;
-use super::theme::{Palette, Typography};
-use super::widgets::{self, PopupOption, footnote, section_header};
+use super::icons::{self, Icon, Symbol};
 use crate::app::Core;
 use crate::browsers;
 use crate::config::{Action, Config, Rule, Target};
-use crate::macos::{self, LoginItemStatus, RunningApp};
+use crate::macos::{self, LoginItemStatus};
 
 pub const SIZE: (f64, f64) = (760.0, 540.0);
 pub const MIN_SIZE: (f64, f64) = (640.0, 420.0);
-const SIDEBAR_WIDTH: f32 = 200.0;
-const TITLEBAR_HEIGHT: f32 = 52.0;
-const AUTOSAVE_DELAY: Duration = Duration::from_millis(400);
-const WARNING: Color32 = Color32::from_rgb(230, 140, 20);
 
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq)]
 enum Page {
     General,
     Picker,
@@ -26,666 +18,542 @@ enum Page {
     Rule(usize),
 }
 
-/// 描画中は Core を借用しているので、副作用はここに積んで描画後に App 側で行う
-#[derive(Default)]
-pub struct Effects {
-    pub save: Option<Config>,
-    pub set_default_browser: bool,
-    pub login_item: Option<bool>,
-    pub choose_source_app: Option<usize>,
-}
+const PAGES: [(Page, &str, &str, &str); 3] = [
+    (Page::General, "一般", "gearshape.fill", "#8e8e93"),
+    (Page::Picker, "選択UI", "square.grid.2x2.fill", "#0a84ff"),
+    (Page::Rules, "ルール", "arrow.triangle.branch", "#ff9500"),
+];
 
-pub struct Settings {
-    page: Page,
-    pub draft: Config,
-    pending: Option<(Config, Instant)>,
-    running_apps: Vec<RunningApp>,
-    is_default_browser: bool,
-    pub login_item: LoginItemStatus,
-    pub error: Option<String>,
-    focus: Option<Id>,
-}
+#[component]
+pub fn Settings() -> Element {
+    let mut core = use_context::<Signal<Core>>();
+    let draft = use_signal(|| core.peek().store.config().clone());
+    let mut page = use_signal(initial_page);
+    let mut error = use_signal(|| None::<String>);
 
-impl Settings {
-    pub fn new(config: &Config) -> Self {
-        #[cfg(debug_assertions)]
-        let page = match std::env::var("LIGHTWELL_PREVIEW").as_deref() {
-            Ok("settings:picker") => Page::Picker,
-            Ok("settings:rules") => Page::Rules,
-            Ok("settings:rule") => Page::Rule(0),
-            _ => Page::General,
-        };
-        #[cfg(not(debug_assertions))]
-        let page = Page::General;
-        Self {
-            page,
-            draft: config.clone(),
-            pending: None,
-            running_apps: macos::running_apps(),
-            is_default_browser: macos::is_default_browser(),
-            login_item: macos::login_item_status(),
-            error: None,
-            focus: None,
-        }
-    }
-
-    pub fn show(&mut self, ui: &mut Ui, core: &Core, textures: &mut Textures) -> Effects {
-        let mut fx = Effects::default();
-        titlebar_drag_area(ui);
-        // サイドバーは塗らずに背面のすりガラスを透かす
-        egui::Panel::left("sidebar")
-            .exact_size(SIDEBAR_WIDTH)
-            .resizable(false)
-            .frame(Frame::new().inner_margin(Margin {
-                left: 10,
-                right: 10,
-                top: TITLEBAR_HEIGHT as i8,
-                bottom: 0,
-            }))
-            .show(ui, |ui| self.sidebar(ui, textures));
-        egui::CentralPanel::default()
-            .frame(Frame::new().fill(Palette::of(ui).window))
-            .show(ui, |ui| self.content(ui, core, textures, &mut fx));
-        self.autosave(ui.ctx(), core, &mut fx);
-        fx
-    }
-
-    fn autosave(&mut self, ctx: &egui::Context, core: &Core, fx: &mut Effects) {
-        let normalized = normalize(&self.draft);
-        if normalized == *core.store.config() {
-            self.pending = None;
-            return;
-        }
-        let now = Instant::now();
-        let since = match &self.pending {
-            Some((pending, since)) if *pending == normalized => *since,
-            _ => {
-                self.pending = Some((normalized.clone(), now));
-                now
-            }
-        };
-        if now.duration_since(since) >= AUTOSAVE_DELAY {
-            fx.save = Some(normalized);
-            self.pending = None;
-        } else {
-            ctx.request_repaint_after(AUTOSAVE_DELAY - now.duration_since(since));
-        }
-    }
-
-    fn sidebar(&mut self, ui: &mut Ui, textures: &mut Textures) {
-        let p = Palette::of(ui);
-        ui.spacing_mut().item_spacing.y = 2.0;
-        let pages = [
-            (
-                Page::General,
-                "一般",
-                "gearshape.fill",
-                Color32::from_rgb(142, 142, 147),
-            ),
-            (
-                Page::Picker,
-                "選択UI",
-                "square.grid.2x2.fill",
-                Color32::from_rgb(10, 132, 255),
-            ),
-            (
-                Page::Rules,
-                "ルール",
-                "arrow.triangle.branch",
-                Color32::from_rgb(255, 149, 0),
-            ),
-        ];
-        for (page, label, symbol, color) in pages {
-            let selected = match self.page {
-                Page::Rule(_) => page == Page::Rules,
-                current => current == page,
-            };
-            let badge = textures.symbol(ui.ctx(), symbol);
-            let response = Frame::new()
-                .fill(if selected {
-                    p.accent
-                } else {
-                    Color32::TRANSPARENT
-                })
-                .corner_radius(CornerRadius::same(6))
-                .inner_margin(Margin::symmetric(6, 5))
-                .show(ui, |ui| {
-                    ui.set_width(ui.available_width());
-                    Flex::horizontal()
-                        .align_items(FlexAlign::Center)
-                        .gap(vec2(8.0, 0.0))
-                        .show(ui, |f| {
-                            f.add_ui(item(), |ui| {
-                                widgets::symbol_badge(ui, badge.as_ref(), color, 20.0)
-                            });
-                            let text = RichText::new(label);
-                            f.add(
-                                item(),
-                                egui::Label::new(if selected {
-                                    text.color(Color32::WHITE)
-                                } else {
-                                    text
-                                }),
-                            );
-                        });
-                })
-                .response
-                .interact(Sense::click());
-            if response.clicked() {
-                self.page = page;
-            }
-        }
-    }
-
-    fn content(&mut self, ui: &mut Ui, core: &Core, textures: &mut Textures, fx: &mut Effects) {
-        egui::Panel::top("title")
-            .exact_size(TITLEBAR_HEIGHT)
-            .show_separator_line(false)
-            .frame(Frame::new().inner_margin(Margin::symmetric(20, 0)))
-            .show(ui, |ui| self.title(ui, textures));
-        egui::ScrollArea::vertical()
-            .auto_shrink(false)
-            .show(ui, |ui| {
-                Frame::new()
-                    .inner_margin(Margin {
-                        left: 20,
-                        right: 20,
-                        top: 0,
-                        bottom: 24,
-                    })
-                    .show(ui, |ui| match self.page {
-                        Page::General => self.general(ui, core, textures, fx),
-                        Page::Picker => self.picker(ui, core, textures),
-                        Page::Rules => self.rules(ui, core, textures),
-                        Page::Rule(i) => self.rule(ui, i, core, textures, fx),
-                    });
-            });
-    }
-
-    fn title(&mut self, ui: &mut Ui, textures: &mut Textures) {
-        let title = match self.page {
-            Page::General => "一般",
-            Page::Picker => "選択UI",
-            Page::Rules => "ルール",
-            Page::Rule(i) => self.draft.rules.get(i).map_or("", display_name),
-        }
-        .to_owned();
-        let secondary = Palette::of(ui).secondary;
-        let back_icon = textures.symbol(ui.ctx(), "chevron.left");
-        Flex::horizontal()
-            .h_full()
-            .align_items(FlexAlign::Center)
-            .gap(vec2(6.0, 0.0))
-            .show(ui, |f| {
-                if let Page::Rule(_) = self.page {
-                    let back = f.add_ui(item(), |ui| {
-                        widgets::symbol_button(ui, back_icon.as_ref(), secondary)
-                    });
-                    if back.inner.clicked() {
-                        self.page = Page::Rules;
-                    }
-                }
-                f.add(
-                    item(),
-                    egui::Label::new(RichText::new(title).text_style(Typography::Title.style())),
-                );
-            });
-    }
-
-    fn general(&mut self, ui: &mut Ui, core: &Core, textures: &mut Textures, fx: &mut Effects) {
-        let p = Palette::of(ui);
-        widgets::group(ui, |g| {
-            let is_default = self.is_default_browser;
-            let detail = if is_default {
-                "リンクは Lightwell が受け取って振り分けます"
-            } else {
-                "リンクを振り分けるには、Lightwell をデフォルトブラウザにします"
-            };
-            g.described("デフォルトブラウザ", detail, |ui| {
-                if is_default {
-                    ui.label(RichText::new("設定済み").color(p.secondary));
-                } else if ui.button("デフォルトにする").clicked() {
-                    fx.set_default_browser = true;
-                }
-            });
-
-            let requires_approval = self.login_item == LoginItemStatus::RequiresApproval;
-            let detail = if requires_approval {
-                "システム設定のログイン項目で許可してください"
-            } else {
-                "常駐させておくと、リンクを開いたときに待たされません"
-            };
-            g.described("ログイン時に起動", detail, |ui| {
-                ui.horizontal(|ui| {
-                    if requires_approval && ui.button("開く").clicked() {
-                        macos::open_login_items_settings();
-                    }
-                    let mut on = self.login_item != LoginItemStatus::Disabled;
-                    if widgets::toggle(ui, &mut on).changed() {
-                        fx.login_item = Some(on);
-                    }
-                });
-            });
-        });
-
-        section_header(ui, "リンクの開き方");
-        let chevron = textures.symbol(ui.ctx(), "chevron.up.chevron.down");
-        let actions = action_options(core, textures, ui.ctx());
-        widgets::group(ui, |g| {
-            g.described(
-                "通常",
-                "どのルールにも一致しないとき",
-                |ui| {
-                    widgets::popup(
-                        ui,
-                        &mut self.draft.default,
-                        &actions,
-                        "不明なブラウザ",
-                        chevron.as_ref(),
-                    );
-                },
-            );
-            g.described(
-                "Fn キーを押しながら",
-                "ルールより優先されます",
-                |ui| {
-                    let options: Vec<_> = std::iter::once(PopupOption {
-                        value: None,
-                        label: "使わない".to_owned(),
-                        icon: None,
-                    })
-                    .chain(actions.iter().map(|o| PopupOption {
-                        value: Some(o.value.clone()),
-                        label: o.label.clone(),
-                        icon: o.icon.clone(),
-                    }))
-                    .collect();
-                    widgets::popup(
-                        ui,
-                        &mut self.draft.alternative,
-                        &options,
-                        "不明なブラウザ",
-                        chevron.as_ref(),
-                    );
-                },
-            );
-        });
-
-        section_header(ui, "設定ファイル");
-        widgets::group(ui, |g| {
-            g.row(|f| {
-                let path = RichText::new(core.store.path().to_string_lossy()).color(p.secondary);
-                widgets::fill_text(f, path);
-                if f.add(item(), egui::Button::new("Finder で表示")).clicked() {
-                    macos::reveal_in_finder(core.store.path());
-                }
-            });
-        });
-        footnote(
-            ui,
-            "変更は自動で保存されます。ファイルを直接編集した内容も、次にリンクを開いたときに反映されます。",
-        );
-        if let Some(err) = core.store.error() {
-            error_note(
-                ui,
-                &format!("設定ファイルを読み込めませんでした。直前の設定を使っています。\n{err}"),
-            );
-        }
-        if let Some(err) = &self.error {
-            error_note(ui, err);
-        }
-    }
-
-    fn picker(&mut self, ui: &mut Ui, core: &Core, textures: &mut Textures) {
-        let p = Palette::of(ui);
-        let (mut shown, hidden) =
-            browsers::picker_partition(&core.all_choices, self.draft.picker_items.as_deref());
-        let before = shown.clone();
-        let installed = |t: &Target| core.browsers.iter().any(|b| b.bundle_id == t.bundle_id);
-
-        widgets::group(ui, |g| {
-            let mut uncheck = None;
-            widgets::reorderable(g, Id::new("picker-items"), &mut shown, |f, i, target| {
-                let mut on = true;
-                if f.add_ui(item(), |ui| widgets::checkbox(ui, &mut on))
-                    .inner
-                    .changed()
-                {
-                    uncheck = Some(i);
-                }
-                browser_label(f, core, textures, target, p.text);
-                if !installed(target) {
-                    f.add(
-                        item(),
-                        egui::Label::new(
-                            RichText::new("未インストール").small().color(p.secondary),
-                        ),
-                    );
-                }
-                if i < 9 {
-                    f.add(
-                        item(),
-                        egui::Label::new(RichText::new((i + 1).to_string()).color(p.tertiary)),
-                    );
-                }
-            });
-            if let Some(i) = uncheck {
-                shown.remove(i);
-            }
-            for target in &hidden {
-                g.row(|f| {
-                    f.add_ui(item(), widgets::drag_handle_spacer);
-                    let mut on = false;
-                    if f.add_ui(item(), |ui| widgets::checkbox(ui, &mut on))
-                        .inner
-                        .changed()
-                    {
-                        shown.push(target.clone());
-                    }
-                    browser_label(f, core, textures, target, p.secondary);
-                });
-            }
-        });
-        if shown != before {
-            self.draft.picker_items = Some(shown);
-        }
-        footnote(
-            ui,
-            "チェックしたものが、この順番で選択UIに並びます。ドラッグで並べ替えられます。先頭9件は数字キーで選べます。",
-        );
-    }
-
-    fn rules(&mut self, ui: &mut Ui, core: &Core, textures: &mut Textures) {
-        let p = Palette::of(ui);
-        let chevron = textures.symbol(ui.ctx(), "chevron.right");
-        let mut open = None;
-        widgets::group(ui, |g| {
-            if self.draft.rules.is_empty() {
-                g.row(|f| {
-                    widgets::fill_text(
-                        f,
-                        RichText::new("ルールはまだありません").color(p.secondary),
-                    );
-                });
-                return;
-            }
-            widgets::reorderable(g, Id::new("rules"), &mut self.draft.rules, |f, i, rule| {
-                let summary = if rule.has_conditions() {
-                    RichText::new(summarize(rule, textures))
-                        .small()
-                        .color(p.secondary)
-                } else {
-                    RichText::new("条件がないため使われません")
-                        .small()
-                        .color(WARNING)
-                };
-                let name = RichText::new(display_name(rule));
-                let name = if rule.name.trim().is_empty() {
-                    name.color(p.secondary)
-                } else {
-                    name
-                };
-                let target_icon = match &rule.action {
-                    Action::Browser(t) => textures.browser_icon(f.ui().ctx(), &t.bundle_id),
-                    Action::Picker => None,
-                };
-                let row = f.add_flex(
-                    item().grow(1.0).sense(Sense::click()),
-                    Flex::horizontal()
-                        .align_items(FlexAlign::Center)
-                        .gap(vec2(8.0, 0.0)),
-                    |f| {
-                        widgets::text_column(f, vec![name.into(), summary.into()]);
-                        if target_icon.is_some() {
-                            f.add_widget(item(), widgets::icon(target_icon.as_ref(), 18.0));
-                        }
-                        f.add(
-                            item(),
-                            egui::Label::new(
-                                RichText::new(browsers::describe(&core.browsers, &rule.action))
-                                    .color(p.secondary),
-                            ),
-                        );
-                        f.add_widget(item(), widgets::symbol(chevron.as_ref(), 10.0, p.tertiary));
-                    },
-                );
-                if row.response.clicked() {
-                    open = Some(i);
-                }
-            });
-        });
-        ui.add_space(10.0);
-        if ui.button("＋ ルールを追加").clicked() {
-            self.draft.rules.push(Rule {
-                name: "新しいルール".to_owned(),
-                ..Default::default()
-            });
-            open = Some(self.draft.rules.len() - 1);
-        }
-        footnote(
-            ui,
-            "上から順に評価し、最初に一致したルールのブラウザで開きます。ドラッグで並べ替えられます。",
-        );
-        if let Some(i) = open {
-            self.page = Page::Rule(i);
-        }
-    }
-
-    fn rule(
-        &mut self,
-        ui: &mut Ui,
-        i: usize,
-        core: &Core,
-        textures: &mut Textures,
-        fx: &mut Effects,
-    ) {
-        let p = Palette::of(ui);
-        let minus = textures.symbol(ui.ctx(), "minus.circle.fill");
-        let chevron = textures.symbol(ui.ctx(), "chevron.up.chevron.down");
-        let actions = action_options(core, textures, ui.ctx());
-        let Some(rule) = self.draft.rules.get_mut(i) else {
-            self.page = Page::Rules;
-            return;
-        };
-
-        widgets::group(ui, |g| {
-            g.labeled("名前", |ui| {
-                ui.add(egui::TextEdit::singleline(&mut rule.name).desired_width(260.0));
-            });
-        });
-
-        let patterns = [
-            (
-                "ホスト",
-                "*.example.com",
-                "* は任意の文字列に一致します。*.example.com は example.com 自体には一致しません",
-                &mut rule.hosts,
-                "＋ ホストを追加",
-            ),
-            (
-                "URL",
-                "https://github.com/my-org/*",
-                "URL全体に対するパターンです",
-                &mut rule.urls,
-                "＋ URLを追加",
-            ),
-        ];
-        for (title, hint, caption, list, add_label) in patterns {
-            section_header(ui, title);
-            widgets::group(ui, |g| {
-                let mut remove = None;
-                for (j, value) in list.iter_mut().enumerate() {
-                    let id = Id::new((title, i, j));
-                    g.row(|f| {
-                        let edit = egui::TextEdit::singleline(value).id(id).hint_text(hint);
-                        let response = f.add(widgets::fill(), edit);
-                        if self.focus == Some(id) {
-                            response.request_focus();
-                            self.focus = None;
-                        }
-                        if f.add_ui(item(), |ui| {
-                            widgets::symbol_button(ui, minus.as_ref(), p.tertiary)
-                        })
-                        .inner
-                        .clicked()
-                        {
-                            remove = Some(j);
-                        }
-                    });
-                }
-                if let Some(j) = remove {
-                    list.remove(j);
-                }
-                g.row(|f| {
-                    if f.add_ui(item(), |ui| ui.add(widgets::link_button(add_label)))
-                        .inner
-                        .clicked()
-                    {
-                        list.push(String::new());
-                        self.focus = Some(Id::new((title, i, list.len() - 1)));
-                    }
-                });
-            });
-            footnote(ui, caption);
-        }
-
-        section_header(ui, "開き元アプリ");
-        widgets::group(ui, |g| {
-            let mut remove = None;
-            for (j, bundle_id) in rule.source_apps.iter().enumerate() {
-                g.row(|f| {
-                    let icon = textures.app_icon(f.ui().ctx(), bundle_id);
-                    f.add_widget(item(), widgets::icon(icon.as_ref(), 22.0));
-                    f.add(item(), egui::Label::new(textures.app_name(bundle_id)));
-                    widgets::fill_text(f, RichText::new(bundle_id).small().color(p.tertiary));
-                    if f.add_ui(item(), |ui| {
-                        widgets::symbol_button(ui, minus.as_ref(), p.tertiary)
-                    })
-                    .inner
-                    .clicked()
-                    {
-                        remove = Some(j);
-                    }
-                });
-            }
-            if let Some(j) = remove {
-                rule.source_apps.remove(j);
-            }
-            g.row(|f| {
-                f.add_ui(item(), |ui| {
-                    add_source_app_menu(ui, rule, &self.running_apps, textures, i, fx);
-                });
-            });
-        });
-        footnote(ui, "どのアプリでリンクをクリックしたかで振り分けます");
-
-        section_header(ui, "開くブラウザ");
-        widgets::group(ui, |g| {
-            g.labeled("ブラウザ", |ui| {
-                widgets::popup(
-                    ui,
-                    &mut rule.action,
-                    &actions,
-                    "不明なブラウザ",
-                    chevron.as_ref(),
-                );
-            });
-        });
-
-        if !rule.has_conditions() {
-            ui.add_space(8.0);
-            ui.label(
-                RichText::new(
-                    "ホスト・URL・開き元アプリのいずれかを設定するまで、このルールは使われません",
-                )
-                .small()
-                .color(WARNING),
-            );
-        }
-
-        ui.add_space(20.0);
-        if ui
-            .button(RichText::new("ルールを削除").color(p.destructive))
-            .clicked()
-        {
-            self.draft.rules.remove(i);
-            self.page = Page::Rules;
-        }
-    }
-}
-
-fn add_source_app_menu(
-    ui: &mut Ui,
-    rule: &mut Rule,
-    running_apps: &[RunningApp],
-    textures: &mut Textures,
-    rule_index: usize,
-    fx: &mut Effects,
-) {
-    let p = Palette::of(ui);
-    let button = egui::Button::new(RichText::new("＋ アプリを追加").color(p.accent)).frame(false);
-    egui::containers::menu::MenuButton::from_button(button).ui(ui, |ui| {
-        ui.set_min_width(240.0);
-        ui.label(RichText::new("起動中のアプリ").small().color(p.secondary));
-        for app in running_apps {
-            if rule.source_apps.contains(&app.bundle_id) {
-                continue;
-            }
-            let mut atoms = egui::Atoms::default();
-            if let Some(icon) = textures.app_icon(ui.ctx(), &app.bundle_id) {
-                atoms
-                    .push_right(egui::Image::new(&icon).fit_to_exact_size(egui::Vec2::splat(16.0)));
-            }
-            atoms.push_right(app.name.as_str());
-            if ui.add(egui::Button::new(atoms)).clicked() {
-                rule.source_apps.push(app.bundle_id.clone());
-                ui.close();
-            }
-        }
-        ui.separator();
-        if ui.button("その他のアプリ…").clicked() {
-            fx.choose_source_app = Some(rule_index);
-            ui.close();
+    use_effect(move || {
+        let config = normalize(&draft.read());
+        if config != *core.peek().store.config() {
+            let result = core.write().store.save(config);
+            error.set(result.err().map(|e| format!("保存に失敗しました: {e}")));
         }
     });
-}
 
-/// タイトルバー部分は egui が覆っているので、何もない所のドラッグでウィンドウを動かせるようにする。
-/// 後から置くウィジェットが優先されるよう、最初に登録する
-fn titlebar_drag_area(ui: &mut Ui) {
-    let rect = ui
-        .max_rect()
-        .with_max_y(ui.max_rect().top() + TITLEBAR_HEIGHT);
-    if ui
-        .interact(rect, Id::new("titlebar-drag"), Sense::drag())
-        .drag_started()
-    {
-        ui.ctx().send_viewport_cmd(egui::ViewportCommand::StartDrag);
+    let title = match page() {
+        Page::General => "一般".to_owned(),
+        Page::Picker => "選択UI".to_owned(),
+        Page::Rules => "ルール".to_owned(),
+        Page::Rule(i) => draft
+            .read()
+            .rules
+            .get(i)
+            .map_or("", display_name)
+            .to_owned(),
+    };
+    rsx! {
+        div { class: "settings",
+            nav { class: "sidebar",
+                div { class: "titlebar", onmousedown: drag_window }
+                for (target, label, symbol, color) in PAGES {
+                    div {
+                        class: if is_in(page(), target) { "nav selected" } else { "nav" },
+                        onclick: move |_| page.set(target),
+                        span { class: "badge", style: "background: {color}",
+                            Symbol { name: symbol, size: 13 }
+                        }
+                        "{label}"
+                    }
+                }
+            }
+            main { class: "content",
+                header { class: "titlebar", onmousedown: drag_window,
+                    if let Page::Rule(_) = page() {
+                        button {
+                            class: "icon-button",
+                            onmousedown: |e| e.stop_propagation(),
+                            onclick: move |_| page.set(Page::Rules),
+                            Symbol { name: "chevron.left", size: 13 }
+                        }
+                    }
+                    h1 { "{title}" }
+                }
+                div { class: "page",
+                    match page() {
+                        Page::General => rsx! { GeneralPage { draft, error } },
+                        Page::Picker => rsx! { PickerPage { draft } },
+                        Page::Rules => rsx! { RulesPage { draft, page } },
+                        Page::Rule(index) => rsx! { RulePage { draft, page, index } },
+                    }
+                    if let Some(err) = error() {
+                        p { class: "error", "{err}" }
+                    }
+                }
+            }
+        }
     }
 }
 
-fn browser_label(
-    f: &mut FlexInstance,
-    core: &Core,
-    textures: &mut Textures,
-    target: &Target,
-    color: Color32,
-) {
-    let icon = textures.browser_icon(f.ui().ctx(), &target.bundle_id);
-    f.add_widget(item(), widgets::icon(icon.as_ref(), 22.0));
-    widgets::fill_text(
-        f,
-        RichText::new(browsers::describe_target(&core.browsers, target)).color(color),
-    );
+#[component]
+fn GeneralPage(draft: Signal<Config>, error: Signal<Option<String>>) -> Element {
+    let core = use_context::<Signal<Core>>();
+    let is_default = use_signal(macos::is_default_browser);
+    let mut login_item = use_signal(macos::login_item_status);
+    let core = core.read();
+    let actions = action_options(&core);
+    let alternatives = std::iter::once((None, "使わない".to_owned()))
+        .chain(
+            actions
+                .iter()
+                .map(|(a, label)| (Some(a.clone()), label.clone())),
+        )
+        .collect();
+    let default_detail = if is_default() {
+        "リンクは Lightwell が受け取って振り分けます"
+    } else {
+        "リンクを振り分けるには、Lightwell をデフォルトブラウザにします"
+    };
+    let requires_approval = login_item() == LoginItemStatus::RequiresApproval;
+    let login_detail = if requires_approval {
+        "システム設定のログイン項目で許可してください"
+    } else {
+        "常駐させておくと、リンクを開いたときに待たされません"
+    };
+    let path = core.store.path().to_owned();
+    let path_label = path.display().to_string();
+    rsx! {
+        div { class: "group",
+            Row {
+                label: "デフォルトブラウザ",
+                detail: default_detail,
+                if is_default() {
+                    span { class: "secondary", "設定済み" }
+                } else {
+                    button { onclick: |_| macos::set_as_default_browser(), "デフォルトにする" }
+                }
+            }
+            Row {
+                label: "ログイン時に起動",
+                detail: login_detail,
+                if requires_approval {
+                    button { onclick: |_| macos::open_login_items_settings(), "開く" }
+                }
+                input {
+                    r#type: "checkbox",
+                    "switch": true,
+                    checked: login_item() != LoginItemStatus::Disabled,
+                    onchange: move |e| {
+                        if let Err(err) = macos::set_login_item(e.checked()) {
+                            error.set(Some(format!("ログイン項目の変更に失敗しました: {err}")));
+                        }
+                        login_item.set(macos::login_item_status());
+                    },
+                }
+            }
+        }
+
+        h2 { "リンクの開き方" }
+        div { class: "group",
+            Row { label: "通常", detail: "どのルールにも一致しないとき",
+                Select {
+                    value: draft.read().default.clone(),
+                    options: actions,
+                    onchange: move |action: Action| draft.write().default = action,
+                }
+            }
+            Row { label: "Fn キーを押しながら", detail: "ルールより優先されます",
+                Select {
+                    value: draft.read().alternative.clone(),
+                    options: alternatives,
+                    onchange: move |action: Option<Action>| draft.write().alternative = action,
+                }
+            }
+        }
+
+        h2 { "設定ファイル" }
+        div { class: "group",
+            div { class: "row",
+                span { class: "grow truncate secondary", "{path_label}" }
+                button { onclick: move |_| macos::reveal_in_finder(&path), "Finder で表示" }
+            }
+        }
+        p { class: "footnote",
+            "変更は自動で保存されます。ファイルを直接編集した内容も、次にリンクを開いたときに反映されます。"
+        }
+        if let Some(err) = core.store.error() {
+            p { class: "error",
+                "設定ファイルを読み込めませんでした。直前の設定を使っています。\n{err}"
+            }
+        }
+    }
 }
 
-fn error_note(ui: &mut Ui, text: &str) {
-    ui.add_space(8.0);
-    ui.label(
-        RichText::new(text)
-            .small()
-            .color(Palette::of(ui).destructive),
+#[component]
+fn PickerPage(draft: Signal<Config>) -> Element {
+    let core = use_context::<Signal<Core>>();
+    let mut dragging = use_signal(|| None::<usize>);
+    let c = core.read();
+    let (shown, hidden) =
+        browsers::picker_partition(&c.all_choices, draft.read().picker_items.as_deref());
+    rsx! {
+        div { class: "group", ondragover: |e| e.prevent_default(),
+            for (i, target) in shown.iter().enumerate() {
+                div {
+                    class: if dragging() == Some(i) { "row dragging" } else { "row" },
+                    draggable: true,
+                    ondragstart: move |_| dragging.set(Some(i)),
+                    ondragend: move |_| dragging.set(None),
+                    ondragenter: move |_| {
+                        if let Some(from) = dragging() && from != i {
+                            edit_shown(core, draft, |items| move_item(items, from, i));
+                            dragging.set(Some(i));
+                        }
+                    },
+                    span { class: "handle", Symbol { name: "line.3.horizontal", size: 12 } }
+                    input {
+                        r#type: "checkbox",
+                        checked: true,
+                        onchange: move |_| edit_shown(core, draft, |items| _ = items.remove(i)),
+                    }
+                    BrowserLabel { target: target.clone() }
+                    if !c.browsers.iter().any(|b| b.bundle_id == target.bundle_id) {
+                        span { class: "detail", "未インストール" }
+                    }
+                    if i < 9 {
+                        span { class: "tertiary", "{i + 1}" }
+                    }
+                }
+            }
+            for target in hidden {
+                div { class: "row",
+                    span { class: "handle" }
+                    input {
+                        r#type: "checkbox",
+                        checked: false,
+                        onchange: move |_| edit_shown(core, draft, |items| items.push(target.clone())),
+                    }
+                    BrowserLabel { target: target.clone(), dimmed: true }
+                }
+            }
+        }
+        p { class: "footnote",
+            "チェックしたものが、この順番で選択UIに並びます。ドラッグで並べ替えられます。先頭9件は数字キーで選べます。"
+        }
+    }
+}
+
+/// 未設定 (検出したものをすべて表示) の状態から操作したときは、その時点の表示内容を明示的な設定にする
+fn edit_shown(core: Signal<Core>, mut draft: Signal<Config>, edit: impl FnOnce(&mut Vec<Target>)) {
+    let (mut shown, _) = browsers::picker_partition(
+        &core.read().all_choices,
+        draft.read().picker_items.as_deref(),
     );
+    edit(&mut shown);
+    draft.write().picker_items = Some(shown);
+}
+
+#[component]
+fn BrowserLabel(target: Target, #[props(default)] dimmed: bool) -> Element {
+    let core = use_context::<Signal<Core>>();
+    let core = core.read();
+    rsx! {
+        Icon { src: icons::browser_icon(&core.browsers, &target.bundle_id), size: 22 }
+        span { class: if dimmed { "grow truncate secondary" } else { "grow truncate" },
+            "{browsers::describe_target(&core.browsers, &target)}"
+        }
+    }
+}
+
+#[component]
+fn RulesPage(draft: Signal<Config>, page: Signal<Page>) -> Element {
+    let core = use_context::<Signal<Core>>();
+    let mut dragging = use_signal(|| None::<usize>);
+    let core = core.read();
+    let rules = draft.read().rules.clone();
+    rsx! {
+        div { class: "group", ondragover: |e| e.prevent_default(),
+            if rules.is_empty() {
+                div { class: "row secondary", "ルールはまだありません" }
+            }
+            for (i, rule) in rules.iter().enumerate() {
+                div {
+                    class: if dragging() == Some(i) { "row clickable dragging" } else { "row clickable" },
+                    draggable: true,
+                    ondragstart: move |_| dragging.set(Some(i)),
+                    ondragend: move |_| dragging.set(None),
+                    ondragenter: move |_| {
+                        if let Some(from) = dragging() && from != i {
+                            move_item(&mut draft.write().rules, from, i);
+                            dragging.set(Some(i));
+                        }
+                    },
+                    onclick: move |_| page.set(Page::Rule(i)),
+                    span { class: "handle", Symbol { name: "line.3.horizontal", size: 12 } }
+                    div { class: "grow",
+                        div { class: if rule.name.trim().is_empty() { "truncate secondary" } else { "truncate" },
+                            "{display_name(rule)}"
+                        }
+                        if rule.has_conditions() {
+                            div { class: "detail truncate", "{summarize(rule)}" }
+                        } else {
+                            div { class: "detail warning", "条件がないため使われません" }
+                        }
+                    }
+                    if let Action::Browser(target) = &rule.action {
+                        Icon { src: icons::browser_icon(&core.browsers, &target.bundle_id), size: 18 }
+                    }
+                    span { class: "secondary", "{browsers::describe(&core.browsers, &rule.action)}" }
+                    Symbol { name: "chevron.right", size: 10 }
+                }
+            }
+        }
+        button {
+            class: "add",
+            onclick: move |_| {
+                let mut config = draft.write();
+                config.rules.push(Rule {
+                    name: "新しいルール".to_owned(),
+                    ..Default::default()
+                });
+                page.set(Page::Rule(config.rules.len() - 1));
+            },
+            "＋ ルールを追加"
+        }
+        p { class: "footnote",
+            "上から順に評価し、最初に一致したルールのブラウザで開きます。ドラッグで並べ替えられます。"
+        }
+    }
+}
+
+#[component]
+fn RulePage(draft: Signal<Config>, page: Signal<Page>, index: usize) -> Element {
+    let core = use_context::<Signal<Core>>();
+    let running_apps = use_hook(macos::running_apps);
+    let Some(rule) = draft.read().rules.get(index).cloned() else {
+        return rsx! {};
+    };
+    let actions = action_options(&core.read());
+    let i = index;
+    rsx! {
+        div { class: "group",
+            Row { label: "名前",
+                input {
+                    r#type: "text",
+                    class: "name",
+                    value: "{rule.name}",
+                    oninput: move |e| draft.write().rules[i].name = e.value(),
+                }
+            }
+        }
+
+        PatternList {
+            title: "ホスト",
+            placeholder: "*.example.com",
+            caption: "* は任意の文字列に一致します。*.example.com は example.com 自体には一致しません",
+            add_label: "＋ ホストを追加",
+            values: rule.hosts.clone(),
+            onchange: move |hosts| draft.write().rules[i].hosts = hosts,
+        }
+        PatternList {
+            title: "URL",
+            placeholder: "https://github.com/my-org/*",
+            caption: "URL全体に対するパターンです",
+            add_label: "＋ URLを追加",
+            values: rule.urls.clone(),
+            onchange: move |urls| draft.write().rules[i].urls = urls,
+        }
+
+        h2 { "開き元アプリ" }
+        div { class: "group",
+            for (j, bundle_id) in rule.source_apps.iter().enumerate() {
+                div { class: "row",
+                    Icon { src: icons::app_icon(bundle_id), size: 22 }
+                    span { "{app_name(bundle_id)}" }
+                    span { class: "grow truncate detail", "{bundle_id}" }
+                    RemoveButton { onclick: move |_| _ = draft.write().rules[i].source_apps.remove(j) }
+                }
+            }
+            div { class: "row",
+                select {
+                    id: "add-source-app",
+                    class: "link",
+                    onchange: move |e| {
+                        let bundle_id = match e.value().as_str() {
+                            "" => None,
+                            "other" => MainThreadMarker::new().and_then(macos::choose_app),
+                            id => Some(id.to_owned()),
+                        };
+                        let apps = &mut draft.write().rules[i].source_apps;
+                        if let Some(id) = bundle_id && !apps.contains(&id) {
+                            apps.push(id);
+                        }
+                        // 選んだ項目が表示に残らないよう見出しに戻す。value は変わらないので再描画では戻らない
+                        dioxus::document::eval("document.getElementById('add-source-app').value = ''");
+                    },
+                    option { value: "", "＋ アプリを追加" }
+                    optgroup { label: "起動中のアプリ",
+                        for app in running_apps.iter().filter(|a| !rule.source_apps.contains(&a.bundle_id)) {
+                            option { value: "{app.bundle_id}", "{app.name}" }
+                        }
+                    }
+                    option { value: "other", "その他のアプリ…" }
+                }
+            }
+        }
+        p { class: "footnote", "どのアプリでリンクをクリックしたかで振り分けます" }
+
+        h2 { "開くブラウザ" }
+        div { class: "group",
+            Row { label: "ブラウザ",
+                Select {
+                    value: rule.action.clone(),
+                    options: actions,
+                    onchange: move |action: Action| draft.write().rules[i].action = action,
+                }
+            }
+        }
+        if !rule.has_conditions() {
+            p { class: "warning",
+                "ホスト・URL・開き元アプリのいずれかを設定するまで、このルールは使われません"
+            }
+        }
+
+        button {
+            class: "destructive",
+            onclick: move |_| {
+                draft.write().rules.remove(i);
+                page.set(Page::Rules);
+            },
+            "ルールを削除"
+        }
+    }
+}
+
+/// 入力中の行を残すため、空文字列も含めたまま編集する。保存時に normalize で取り除く
+#[component]
+fn PatternList(
+    title: &'static str,
+    placeholder: &'static str,
+    caption: &'static str,
+    add_label: &'static str,
+    values: Vec<String>,
+    onchange: EventHandler<Vec<String>>,
+) -> Element {
+    let mut added = use_signal(|| false);
+    let edit = move |values: &Vec<String>, f: &dyn Fn(&mut Vec<String>)| {
+        let mut values = values.clone();
+        f(&mut values);
+        onchange(values);
+    };
+    rsx! {
+        h2 { "{title}" }
+        div { class: "group",
+            for (j, value) in values.iter().enumerate() {
+                div { class: "row",
+                    input {
+                        r#type: "text",
+                        class: "grow",
+                        placeholder,
+                        value: "{value}",
+                        onmounted: move |e| async move {
+                            if added() {
+                                _ = e.set_focus(true).await;
+                            }
+                        },
+                        oninput: {
+                            let values = values.clone();
+                            move |e: FormEvent| edit(&values, &|v| v[j] = e.value())
+                        },
+                    }
+                    RemoveButton {
+                        onclick: {
+                            let values = values.clone();
+                            move |_| edit(&values, &|v| _ = v.remove(j))
+                        },
+                    }
+                }
+            }
+            div { class: "row",
+                button {
+                    class: "link",
+                    onclick: {
+                        let values = values.clone();
+                        move |_| {
+                            added.set(true);
+                            edit(&values, &|v| v.push(String::new()));
+                        }
+                    },
+                    "{add_label}"
+                }
+            }
+        }
+        p { class: "footnote", "{caption}" }
+    }
+}
+
+#[component]
+fn Row(label: &'static str, #[props(default)] detail: &'static str, children: Element) -> Element {
+    rsx! {
+        div { class: "row",
+            div { class: "grow",
+                div { class: "truncate", "{label}" }
+                if !detail.is_empty() {
+                    div { class: "detail", "{detail}" }
+                }
+            }
+            {children}
+        }
+    }
+}
+
+#[component]
+fn RemoveButton(onclick: EventHandler<MouseEvent>) -> Element {
+    rsx! {
+        button { class: "icon-button tertiary", onclick: move |e| onclick.call(e),
+            Symbol { name: "minus.circle.fill", size: 13 }
+        }
+    }
+}
+
+/// 一覧にない値 (アンインストールしたブラウザなど) は、選べない項目として表示する
+#[component]
+fn Select<T: Clone + PartialEq + 'static>(
+    value: T,
+    options: Vec<(T, String)>,
+    onchange: EventHandler<T>,
+) -> Element {
+    let selected = options.iter().position(|(v, _)| *v == value);
+    let labels: Vec<String> = options.iter().map(|(_, label)| label.clone()).collect();
+    rsx! {
+        select {
+            onchange: move |e| {
+                if let Some((value, _)) = e.value().parse::<usize>().ok().and_then(|i| options.get(i)) {
+                    onchange(value.clone());
+                }
+            },
+            if selected.is_none() {
+                option { disabled: true, selected: true, "不明なブラウザ" }
+            }
+            for (i, label) in labels.iter().enumerate() {
+                option { value: "{i}", selected: selected == Some(i), "{label}" }
+            }
+        }
+    }
+}
+
+fn drag_window(_: MouseEvent) {
+    dioxus::desktop::window().drag();
+}
+
+fn is_in(current: Page, target: Page) -> bool {
+    match current {
+        Page::Rule(_) => target == Page::Rules,
+        current => current == target,
+    }
+}
+
+fn move_item<T>(items: &mut Vec<T>, from: usize, to: usize) {
+    let item = items.remove(from);
+    items.insert(to, item);
 }
 
 fn display_name(rule: &Rule) -> &str {
@@ -695,7 +563,11 @@ fn display_name(rule: &Rule) -> &str {
     }
 }
 
-fn summarize(rule: &Rule, textures: &mut Textures) -> String {
+fn app_name(bundle_id: &str) -> String {
+    macos::app_name(bundle_id).unwrap_or_else(|| bundle_id.to_owned())
+}
+
+fn summarize(rule: &Rule) -> String {
     let list = |items: &[String]| {
         let items: Vec<&str> = items
             .iter()
@@ -713,32 +585,20 @@ fn summarize(rule: &Rule, textures: &mut Textures) -> String {
         .flatten()
         .collect();
     if !rule.source_apps.is_empty() {
-        let apps: Vec<_> = rule
-            .source_apps
-            .iter()
-            .map(|b| textures.app_name(b))
-            .collect();
+        let apps: Vec<_> = rule.source_apps.iter().map(|b| app_name(b)).collect();
         parts.push(format!("{} から", apps.join(", ")));
     }
     parts.join(" · ")
 }
 
-fn action_options(
-    core: &Core,
-    textures: &mut Textures,
-    ctx: &egui::Context,
-) -> Vec<PopupOption<Action>> {
-    std::iter::once(PopupOption {
-        value: Action::Picker,
-        label: "選択UIを表示".to_owned(),
-        icon: None,
-    })
-    .chain(core.all_choices.iter().map(|choice| PopupOption {
-        value: Action::Browser(choice.target.clone()),
-        label: choice.label.clone(),
-        icon: textures.browser_icon(ctx, &choice.bundle_id),
-    }))
-    .collect()
+fn action_options(core: &Core) -> Vec<(Action, String)> {
+    std::iter::once((Action::Picker, "選択UIを表示".to_owned()))
+        .chain(
+            core.all_choices
+                .iter()
+                .map(|choice| (Action::Browser(choice.target.clone()), choice.label.clone())),
+        )
+        .collect()
 }
 
 fn normalize(config: &Config) -> Config {
@@ -762,4 +622,15 @@ fn normalize(config: &Config) -> Config {
             .collect(),
         ..config.clone()
     }
+}
+
+fn initial_page() -> Page {
+    #[cfg(debug_assertions)]
+    match std::env::var("LIGHTWELL_PREVIEW").as_deref() {
+        Ok("settings:picker") => return Page::Picker,
+        Ok("settings:rules") => return Page::Rules,
+        Ok("settings:rule") => return Page::Rule(0),
+        _ => {}
+    }
+    Page::General
 }

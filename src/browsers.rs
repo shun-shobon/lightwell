@@ -6,16 +6,18 @@ use objc2_foundation::{NSBundle, NSString, NSURL};
 
 use crate::config::{Action, Target};
 use crate::macos;
+use crate::ui::icons::data_url;
 
-/// Retinaで48pt表示しても粗くならないサイズ
-pub const ICON_SIZE: usize = 128;
+/// Retinaで52pt表示しても粗くならないサイズ
+const ICON_SIZE: usize = 128;
 
 pub struct Browser {
     pub bundle_id: String,
     pub name: String,
     pub app_path: PathBuf,
     pub profiles: Vec<Profile>,
-    pub icon: Option<Vec<u8>>,
+    /// data URL
+    pub icon: Option<String>,
 }
 
 pub struct Profile {
@@ -23,12 +25,13 @@ pub struct Profile {
     pub name: String,
 }
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq)]
 pub struct Choice {
     pub bundle_id: String,
     pub label: String,
     pub browser_name: String,
     pub profile_name: Option<String>,
+    pub icon: Option<String>,
     pub target: Target,
 }
 
@@ -49,7 +52,7 @@ pub fn discover(own_bundle_id: &str) -> Vec<Browser> {
                 let name = app_display_name(&path);
                 Some(Browser {
                     profiles: chromium_profiles(&bundle_id),
-                    icon: macos::app_icon(&path, ICON_SIZE),
+                    icon: macos::app_icon(&path, ICON_SIZE).map(|png| data_url(&png)),
                     bundle_id,
                     name,
                     app_path: path,
@@ -122,6 +125,7 @@ fn choice(browsers: &[Browser], target: Target) -> Choice {
         label: describe_target(browsers, &target),
         browser_name: browser.map_or(target.bundle_id.clone(), |b| b.name.clone()),
         profile_name,
+        icon: browser.and_then(|b| b.icon.clone()),
         target,
     }
 }
