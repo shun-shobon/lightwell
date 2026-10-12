@@ -176,9 +176,6 @@ fn reload(mut core: Signal<Core>) {
 fn initial_view(core: &Core) -> View {
     #[cfg(debug_assertions)]
     if let Ok(preview) = std::env::var("LIGHTWELL_PREVIEW") {
-        if std::env::var("LIGHTWELL_THEME").as_deref() == Ok("light") {
-            macos::force_light_appearance();
-        }
         if preview == "picker" {
             return View::Picker(PickerRequest {
                 url: "https://github.com/shun-shobon/lightwell/pulls?q=is%3Aopen+is%3Apr".into(),

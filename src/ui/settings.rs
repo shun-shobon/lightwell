@@ -18,10 +18,10 @@ enum Page {
     Rule(usize),
 }
 
-const PAGES: [(Page, &str, &str, &str); 3] = [
-    (Page::General, "一般", "gearshape.fill", "#8e8e93"),
-    (Page::Picker, "選択UI", "square.grid.2x2.fill", "#0a84ff"),
-    (Page::Rules, "ルール", "arrow.triangle.branch", "#ff9500"),
+const PAGES: [(Page, &str, &str); 3] = [
+    (Page::General, "一般", "gearshape"),
+    (Page::Picker, "選択UI", "square.grid.2x2"),
+    (Page::Rules, "ルール", "arrow.triangle.branch"),
 ];
 
 #[component]
@@ -54,13 +54,11 @@ pub fn Settings() -> Element {
         div { class: "settings",
             nav { class: "sidebar",
                 div { class: "titlebar", onmousedown: drag_window }
-                for (target, label, symbol, color) in PAGES {
+                for (target, label, symbol) in PAGES {
                     div {
                         class: if is_in(page(), target) { "nav selected" } else { "nav" },
                         onclick: move |_| page.set(target),
-                        span { class: "badge", style: "background: {color}",
-                            Symbol { name: symbol, size: 13 }
-                        }
+                        Symbol { name: symbol, size: 15 }
                         "{label}"
                     }
                 }
@@ -128,7 +126,7 @@ fn GeneralPage(draft: Signal<Config>, error: Signal<Option<String>>) -> Element 
                 if is_default() {
                     span { class: "secondary", "設定済み" }
                 } else {
-                    button { onclick: |_| macos::set_as_default_browser(), "デフォルトにする" }
+                    button { class: "primary", onclick: |_| macos::set_as_default_browser(), "デフォルトにする" }
                 }
             }
             Row {
@@ -139,7 +137,7 @@ fn GeneralPage(draft: Signal<Config>, error: Signal<Option<String>>) -> Element 
                 }
                 input {
                     r#type: "checkbox",
-                    "switch": true,
+                    class: "toggle",
                     checked: login_item() != LoginItemStatus::Disabled,
                     onchange: move |e| {
                         if let Err(err) = macos::set_login_item(e.checked()) {

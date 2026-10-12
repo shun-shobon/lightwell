@@ -8,7 +8,8 @@ use objc2::{
     AnyThread, DefinedClass, MainThreadMarker, MainThreadOnly, define_class, msg_send, sel,
 };
 use objc2_app_kit::{
-    NSApplication, NSApplicationActivationPolicy, NSAutoresizingMaskOptions, NSBitmapImageFileType,
+    NSAppearance, NSAppearanceCustomization, NSAppearanceNameAqua, NSApplication,
+    NSApplicationActivationPolicy, NSAutoresizingMaskOptions, NSBitmapImageFileType,
     NSBitmapImageRep, NSColor, NSCompositingOperation, NSDeviceRGBColorSpace, NSEvent,
     NSEventModifierFlags, NSGraphicsContext, NSImage, NSMenu, NSMenuItem, NSOpenPanel,
     NSRunningApplication, NSScreen, NSStatusBar, NSStatusItem, NSVisualEffectBlendingMode,
@@ -418,6 +419,9 @@ fn install_backdrop(window: &NSWindow, material: NSVisualEffectMaterial, corner_
     );
     window.setOpaque(false);
     window.setBackgroundColor(Some(&NSColor::clearColor()));
+    // UIはライトテーマのみなので、すりガラスもダークモードに追従させない
+    let light = NSAppearance::appearanceNamed(unsafe { NSAppearanceNameAqua });
+    window.setAppearance(light.as_deref());
 }
 
 /// 既定では最後に表示した仮想デスクトップにウィンドウが残り、表示するとそこへ切り替わってしまう。
@@ -615,15 +619,4 @@ pub fn choose_app(mtm: MainThreadMarker) -> Option<String> {
             .bundleIdentifier()?
             .to_string(),
     )
-}
-
-#[cfg(debug_assertions)]
-pub fn force_light_appearance() {
-    let Some(mtm) = MainThreadMarker::new() else {
-        return;
-    };
-    let appearance = objc2_app_kit::NSAppearance::appearanceNamed(unsafe {
-        objc2_app_kit::NSAppearanceNameAqua
-    });
-    NSApplication::sharedApplication(mtm).setAppearance(appearance.as_deref());
 }

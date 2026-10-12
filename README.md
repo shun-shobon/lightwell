@@ -57,5 +57,4 @@ cargo run      # 未バンドルで起動。URL の受け取りを試すには b
 
 # 見た目の確認 (デバッグビルドのみ)。起動直後に表示し、screencapture -l に渡すウィンドウ番号を出力する
 LIGHTWELL_PREVIEW=picker cargo run                 # settings / settings:picker / settings:rules / settings:rule も可
-LIGHTWELL_PREVIEW=settings LIGHTWELL_THEME=light cargo run
 ```

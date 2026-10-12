@@ -1,33 +1,26 @@
 :root {
-  color-scheme: light dark;
-  --accent: -apple-system-control-accent;
-  --window: #f2f2f2;
-  --group: #fcfcfc;
-  --group-stroke: rgb(0 0 0 / 5.5%);
-  --separator: rgb(0 0 0 / 8%);
-  --text: #1d1d1f;
-  --secondary: #6e6e73;
-  --tertiary: #a0a0a5;
-  --hover: rgb(0 0 0 / 7%);
-  --destructive: #ff3b30;
-  --warning: #e68c14;
+  color-scheme: light;
+  --accent: #6b4f8a;
+  --accent-strong: #533b6e;
+  --accent-soft: rgb(107 79 138 / 14%);
+  --accent-softer: rgb(107 79 138 / 8%);
+  --text: #282032;
+  --secondary: #675f71;
+  --tertiary: #a39aaf;
+  --surface: #ffffff;
+  --field: #f4f1f7;
+  --line: #e8e5ec;
+  --hover: rgb(40 32 50 / 5%);
+  --destructive: #d9474f;
+  --destructive-soft: rgb(217 71 79 / 10%);
+  --warning: #d0761f;
+  --sidebar-tint: rgb(240 236 246 / 60%);
+  --content-tint: rgb(251 249 252 / 92%);
+  --picker-tint: rgb(252 251 253 / 80%);
+  --radius: 8px;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --window: #1e1e1e;
-    --group: #282828;
-    --group-stroke: rgb(255 255 255 / 5.5%);
-    --separator: rgb(255 255 255 / 7%);
-    --text: #ebebf0;
-    --secondary: #98989d;
-    --tertiary: #646469;
-    --hover: rgb(255 255 255 / 9%);
-    --destructive: #ff453a;
-  }
-}
-
-/* 背面のすりガラス (NSVisualEffectView) を透かす */
+/* 背面のすりガラス (NSVisualEffectView) を薄く透かす */
 html,
 body,
 #main {
@@ -54,6 +47,7 @@ button,
 input,
 select {
   font: inherit;
+  color: inherit;
 }
 
 .secondary {
@@ -94,13 +88,18 @@ select {
 
 /* 選択UI */
 
+/* ウィンドウ自体の角丸 (AppKit 側) に合わせないと、四隅に色がはみ出す */
 .picker {
+  box-sizing: border-box;
+  height: 100%;
+  border-radius: 14px;
+  background: var(--picker-tint);
   outline: none;
 }
 
 .picker-url {
   box-sizing: border-box;
-  padding: 0 4px 8px;
+  padding: 0 6px 8px;
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
@@ -132,7 +131,7 @@ select {
 }
 
 .tile.selected {
-  background: var(--hover);
+  background: var(--accent-soft);
 }
 
 .tile .icon {
@@ -149,24 +148,36 @@ select {
 
 .tile .name {
   font-size: 12px;
+  font-weight: 500;
 }
 
-/* すりガラスの上では --secondary だと沈むので、本文色を薄めて使う */
-.tile .profile,
-.tile .key {
-  color: var(--text);
-  opacity: 0.62;
+.tile.selected .name {
+  color: var(--accent-strong);
 }
 
 .tile .profile {
   font-size: 11px;
+  color: var(--secondary);
 }
 
 .tile .key {
   position: absolute;
   top: 6px;
-  right: 8px;
+  right: 6px;
+  min-width: 16px;
+  height: 16px;
+  border-radius: 4px;
+  background: var(--hover);
+  color: var(--secondary);
   font-size: 10px;
+  font-weight: 600;
+  line-height: 16px;
+  text-align: center;
+}
+
+.tile.selected .key {
+  background: var(--accent);
+  color: white;
 }
 
 /* 設定画面 */
@@ -183,32 +194,30 @@ select {
 
 .sidebar {
   flex: none;
-  width: 200px;
+  width: 196px;
   box-sizing: border-box;
-  padding: 0 10px;
+  padding: 0 12px;
+  background: var(--sidebar-tint);
 }
 
 .nav {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
   margin-bottom: 2px;
-  padding: 5px 6px;
-  border-radius: 6px;
+  padding: 7px 10px;
+  border-radius: var(--radius);
+  color: var(--secondary);
+}
+
+.nav:hover {
+  background: var(--hover);
 }
 
 .nav.selected {
-  background: var(--accent);
-  color: white;
-}
-
-.badge {
-  display: grid;
-  place-items: center;
-  width: 20px;
-  height: 20px;
-  border-radius: 5px;
-  color: white;
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+  font-weight: 600;
 }
 
 .content {
@@ -216,50 +225,51 @@ select {
   min-width: 0;
   display: flex;
   flex-direction: column;
-  background: var(--window);
+  background: var(--content-tint);
 }
 
 .content .titlebar {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 0 20px;
+  padding: 0 24px;
 }
 
 h1 {
-  font-size: 15px;
-  font-weight: 600;
+  font-size: 17px;
+  font-weight: 700;
 }
 
 .page {
   flex: 1;
   overflow-y: auto;
-  padding: 0 20px 24px;
+  padding: 4px 24px 28px;
 }
 
 h2 {
-  padding: 14px 12px 2px;
-  font-size: 13px;
+  padding: 22px 2px 8px;
+  font-size: 12px;
   font-weight: 600;
+  color: var(--secondary);
 }
 
 .group {
-  padding: 0 12px;
-  border: 1px solid var(--group-stroke);
+  padding: 0 14px;
+  border: 1px solid var(--line);
   border-radius: 10px;
-  background: var(--group);
+  background: var(--surface);
 }
 
 .row {
   display: flex;
   align-items: center;
-  gap: 8px;
-  min-height: 22px;
-  padding: 8px 0;
+  gap: 10px;
+  min-height: 24px;
+  padding: 10px 0;
 }
 
 .row + .row {
-  border-top: 1px solid var(--separator);
+  border-top: 1px solid var(--line);
 }
 
 .handle {
@@ -271,59 +281,146 @@ h2 {
 }
 
 .row.dragging {
-  opacity: 0.45;
+  opacity: 0.4;
 }
 
 .row.clickable:hover {
-  background: var(--hover);
-  margin: 0 -6px;
-  padding: 8px 6px;
+  margin: 0 -8px;
+  padding: 10px 8px;
   border-radius: 6px;
+  border-color: transparent;
+  background: var(--accent-softer);
+}
+
+.row.clickable:hover + .row {
+  border-color: transparent;
 }
 
 .detail {
+  margin-top: 1px;
   font-size: 11px;
   color: var(--secondary);
 }
 
 .footnote {
-  padding: 4px 12px 0;
+  padding: 8px 2px 0;
   font-size: 11px;
+  line-height: 1.5;
   color: var(--secondary);
 }
 
 .error,
 p.warning {
-  padding: 8px 12px 0;
+  margin-top: 12px;
+  padding: 8px 12px;
+  border-radius: var(--radius);
   font-size: 11px;
   white-space: pre-wrap;
 }
 
 .error {
+  background: var(--destructive-soft);
   color: var(--destructive);
 }
 
+p.warning {
+  background: rgb(208 118 31 / 10%);
+}
+
+/* コントロール */
+
+button {
+  padding: 5px 12px;
+  border: none;
+  border-radius: 6px;
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+  font-weight: 500;
+}
+
+button:hover {
+  background: rgb(107 79 138 / 20%);
+}
+
+button.primary {
+  background: var(--accent);
+  color: white;
+}
+
+button.primary:hover {
+  background: var(--accent-strong);
+}
+
 input[type="text"] {
-  padding: 3px 6px;
-  border: 1px solid var(--separator);
-  border-radius: 5px;
-  background: var(--window);
+  padding: 5px 8px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: var(--field);
   color: var(--text);
   outline: none;
 }
 
+input[type="text"]::placeholder {
+  color: var(--tertiary);
+}
+
 input[type="text"]:focus {
   border-color: var(--accent);
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 35%, transparent);
+  background: var(--surface);
 }
 
 input.name {
   width: 260px;
 }
 
+select {
+  -webkit-appearance: none;
+  appearance: none;
+  max-width: 260px;
+  padding: 5px 28px 5px 10px;
+  border: none;
+  border-radius: 6px;
+  background: var(--field)
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%23675f71' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")
+    no-repeat right 10px center;
+  outline: none;
+}
+
+select:hover {
+  background-color: #ede9f2;
+}
+
 input[type="checkbox"] {
+  -webkit-appearance: none;
+  appearance: none;
+  flex: none;
+  width: 16px;
+  height: 16px;
   margin: 0;
-  accent-color: var(--accent);
+  border: 1.5px solid #cec7d7;
+  border-radius: 4px;
+  background: var(--surface) no-repeat center;
+  outline: none;
+}
+
+input[type="checkbox"]:checked {
+  border-color: var(--accent);
+  background-color: var(--accent);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='8' viewBox='0 0 10 8'%3E%3Cpath d='M1 4l2.7 2.7L9 1.3' fill='none' stroke='white' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+}
+
+/* 疑似要素を使うと WebKit の checkbox で描画されないことがあるので、つまみはグラデーションで描く */
+input[type="checkbox"].toggle {
+  width: 34px;
+  height: 20px;
+  border: none;
+  border-radius: 10px;
+  background: radial-gradient(circle at 10px 50%, white 7px, transparent 7.5px) #d5cddf;
+  transition: background 0.15s;
+}
+
+input[type="checkbox"].toggle:checked {
+  background: radial-gradient(circle at 24px 50%, white 7px, transparent 7.5px) var(--accent);
 }
 
 .icon-button,
@@ -337,9 +434,9 @@ input[type="checkbox"] {
 .icon-button {
   display: grid;
   place-items: center;
-  width: 22px;
-  height: 22px;
-  border-radius: 5px;
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
   color: var(--secondary);
 }
 
@@ -347,21 +444,43 @@ input[type="checkbox"] {
   background: var(--hover);
 }
 
+.icon-button.tertiary {
+  color: var(--tertiary);
+}
+
+.icon-button.tertiary:hover {
+  background: none;
+  color: var(--destructive);
+}
+
 .link,
 .add {
+  color: var(--accent-strong);
+  font-weight: 500;
+}
+
+.link:hover,
+.add:hover {
+  background: none;
   color: var(--accent);
 }
 
 select.link {
-  -webkit-appearance: none;
-  appearance: none;
+  max-width: none;
+  padding: 0;
+  background: none;
 }
 
 .add {
-  margin: 10px 12px 0;
+  margin: 12px 2px 0;
 }
 
 .destructive {
-  margin-top: 20px;
+  margin-top: 28px;
+  background: var(--destructive-soft);
   color: var(--destructive);
+}
+
+.destructive:hover {
+  background: rgb(217 71 79 / 16%);
 }
