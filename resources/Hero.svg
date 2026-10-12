@@ -1,0 +1,72 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="640" viewBox="0 0 1280 640">
+  <defs>
+    <filter id="shadow" x="-20%" y="-40%" width="140%" height="180%">
+      <feDropShadow dx="0" dy="2" stdDeviation="4" flood-color="#3f2d55" flood-opacity="0.08"/>
+    </filter>
+    <symbol id="window" viewBox="0 0 40 32">
+      <rect width="40" height="32" rx="6"/>
+    </symbol>
+  </defs>
+
+  <rect width="1280" height="640" fill="#fbf9fc"/>
+
+  <!-- 左: アイコンとコピー -->
+  <g transform="translate(63 165) scale(0.17)">
+    <rect x="100" y="100" width="824" height="824" rx="185" fill="#f4f1f7"/>
+    <rect x="192" y="252" width="480" height="360" rx="36" fill="#b9a6cf"/>
+    <path d="M192 288 a36 36 0 0 1 36 -36 h408 a36 36 0 0 1 36 36 v44 h-480 Z" fill="#a08cba"/>
+    <circle cx="250" cy="292" r="13" fill="#f4f1f7"/>
+    <circle cx="292" cy="292" r="13" fill="#f4f1f7"/>
+    <rect x="272" y="332" width="480" height="360" rx="36" fill="#f2d58a"/>
+    <path d="M272 368 a36 36 0 0 1 36 -36 h408 a36 36 0 0 1 36 36 v44 h-480 Z" fill="#e2bd5c"/>
+    <circle cx="330" cy="372" r="13" fill="#fbecc0"/>
+    <circle cx="372" cy="372" r="13" fill="#fbecc0"/>
+    <rect x="352" y="412" width="480" height="360" rx="36" fill="#6b4f8a"/>
+    <path d="M352 448 a36 36 0 0 1 36 -36 h408 a36 36 0 0 1 36 36 v44 h-480 Z" fill="#3f2d55"/>
+    <circle cx="410" cy="452" r="13" fill="#b9a6cf"/>
+    <circle cx="452" cy="452" r="13" fill="#b9a6cf"/>
+    <path d="M527 697 L657 567 M585.5 567 H657 V638.5" fill="none" stroke="#fbf9fc" stroke-width="36" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+
+  <text x="80" y="406" font-family="'SF Pro Display', system-ui, sans-serif" font-size="68" font-weight="700" letter-spacing="-1.5" fill="#282032">Lightwell</text>
+  <text x="82" y="454" font-family="'Hiragino Sans', sans-serif" font-size="21" font-weight="300" fill="#675f71">macOS 向けブラウザ振り分けアプリ</text>
+
+  <!-- 右: 振り分けの図解 -->
+  <rect x="540" y="136" width="676" height="368" rx="32" fill="#f4f1f7"/>
+
+  <g font-family="ui-monospace, 'SF Mono', Menlo, monospace" font-size="15">
+    <rect x="568" y="298" width="146" height="44" rx="22" fill="#ffffff" stroke="#e8e5ec" filter="url(#shadow)"/>
+    <text x="590" y="325"><tspan fill="#282032" font-weight="600">github.com</tspan><tspan fill="#a39aaf">/…</tspan></text>
+  </g>
+  <path d="M722 320 H762 M754 312 L762 320 L754 328" fill="none" stroke="#6b4f8a" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+
+  <rect x="774" y="272" width="96" height="96" rx="26" fill="#6b4f8a"/>
+  <path d="M806 336 L838 304 M816 304 H838 V326" fill="none" stroke="#fbf9fc" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
+
+  <g fill="none" stroke="#c9bcd9" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M870 320 H942 M934 312 L942 320 L934 328"/>
+    <path d="M870 320 C898 320 896 430 922 430 H942 M934 422 L942 430 L934 438"/>
+  </g>
+  <path d="M870 320 C898 320 896 210 922 210 H942 M934 202 L942 210 L934 218" fill="none" stroke="#6b4f8a" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+
+  <g font-family="'Hiragino Sans', sans-serif">
+    <g transform="translate(952 178)">
+      <rect width="232" height="64" rx="14" fill="#ffffff" stroke="#6b4f8a" stroke-width="2" filter="url(#shadow)"/>
+      <rect x="18" y="16" width="40" height="32" rx="6" fill="#f2d58a"/>
+      <path d="M18 22 a6 6 0 0 1 6 -6 h28 a6 6 0 0 1 6 6 v4 h-40 Z" fill="#e2bd5c"/>
+      <text x="74" y="39" font-size="18" font-weight="600" fill="#282032">Chrome<tspan fill="#a39aaf" font-weight="300"> · </tspan>仕事</text>
+    </g>
+    <g transform="translate(952 288)">
+      <rect width="232" height="64" rx="14" fill="#ffffff" stroke="#e8e5ec" filter="url(#shadow)"/>
+      <rect x="18" y="16" width="40" height="32" rx="6" fill="#b9a6cf"/>
+      <path d="M18 22 a6 6 0 0 1 6 -6 h28 a6 6 0 0 1 6 6 v4 h-40 Z" fill="#a08cba"/>
+      <text x="74" y="39" font-size="18" font-weight="600" fill="#282032">Chrome<tspan fill="#a39aaf" font-weight="300"> · </tspan>個人</text>
+    </g>
+    <g transform="translate(952 398)">
+      <rect width="232" height="64" rx="14" fill="#ffffff" stroke="#e8e5ec" filter="url(#shadow)"/>
+      <rect x="18" y="16" width="40" height="32" rx="6" fill="#6b4f8a"/>
+      <path d="M18 22 a6 6 0 0 1 6 -6 h28 a6 6 0 0 1 6 6 v4 h-40 Z" fill="#3f2d55"/>
+      <text x="74" y="39" font-size="18" font-weight="600" fill="#282032">Safari</text>
+    </g>
+  </g>
+</svg>

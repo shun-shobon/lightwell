@@ -1,5 +1,7 @@
 # Lightwell
 
+![Lightwell](resources/Hero.png)
+
 macOS のデフォルトブラウザとして登録し、開かれたリンクを条件に応じて各ブラウザ (Chromium 系はプロファイル単位) に振り分ける常駐アプリ。
 
 - URL のホスト / URL パターン、リンクを開いたアプリでルールを書ける
@@ -15,7 +17,7 @@ macOS のデフォルトブラウザとして登録し、開かれたリンク�
 
 メニューバーのアイコン →「デフォルトブラウザに設定」で登録する。リンクを開くたびに起動待ちが発生しないよう、設定画面の「ログイン時に起動」を有効にしておくこと。初回起動時は設定画面が自動で開く。
 
-アイコンは `resources/*.svg` を編集し、`./scripts/icons.sh` で `AppIcon.icns` と `MenuBarIcon.tiff` を再生成する。
+アイコンは `resources/*.svg` を編集し、`./scripts/icons.sh` で `AppIcon.icns` と `MenuBarIcon.tiff` を再生成する。README の画像は `resources/Hero.svg` を編集し、`./scripts/hero.sh` (Google Chrome が必要) で `Hero.png` を再生成する。
 
 ## 設定
 
