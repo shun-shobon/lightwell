@@ -9,17 +9,19 @@ use objc2::{
 };
 use objc2_app_kit::{
     NSAppearance, NSAppearanceCustomization, NSAppearanceNameAqua, NSApplication,
-    NSApplicationActivationPolicy, NSAutoresizingMaskOptions, NSBitmapImageFileType,
-    NSBitmapImageRep, NSColor, NSCompositingOperation, NSDeviceRGBColorSpace, NSEvent,
-    NSEventModifierFlags, NSGraphicsContext, NSImage, NSMenu, NSMenuItem, NSOpenPanel,
-    NSRunningApplication, NSScreen, NSStatusBar, NSStatusItem, NSVisualEffectBlendingMode,
-    NSVisualEffectMaterial, NSVisualEffectState, NSVisualEffectView, NSWindow,
-    NSWindowCollectionBehavior, NSWindowOrderingMode, NSWindowStyleMask, NSWindowTitleVisibility,
-    NSWorkspace, NSWorkspaceOpenConfiguration,
+    NSApplicationActivationPolicy, NSApplicationWillFinishLaunchingNotification,
+    NSAutoresizingMaskOptions, NSBitmapImageFileType, NSBitmapImageRep, NSColor,
+    NSCompositingOperation, NSDeviceRGBColorSpace, NSEvent, NSEventModifierFlags,
+    NSGraphicsContext, NSImage, NSMenu, NSMenuItem, NSOpenPanel, NSRunningApplication, NSScreen,
+    NSStatusBar, NSStatusItem, NSVisualEffectBlendingMode, NSVisualEffectMaterial,
+    NSVisualEffectState, NSVisualEffectView, NSWindow, NSWindowCollectionBehavior,
+    NSWindowOrderingMode, NSWindowStyleMask, NSWindowTitleVisibility, NSWorkspace,
+    NSWorkspaceOpenConfiguration,
 };
 use objc2_foundation::{
     NSActivityOptions, NSAppleEventDescriptor, NSAppleEventManager, NSArray, NSBundle, NSData,
-    NSDictionary, NSError, NSFileManager, NSPoint, NSProcessInfo, NSRect, NSSize, NSString, NSURL,
+    NSDictionary, NSError, NSFileManager, NSNotification, NSNotificationCenter, NSPoint,
+    NSProcessInfo, NSRect, NSSize, NSString, NSURL,
 };
 use objc2_service_management::{SMAppService, SMAppServiceStatus};
 
@@ -32,6 +34,10 @@ const INTERNET_EVENT_CLASS: u32 = fourcc(b"GURL");
 const GET_URL: u32 = fourcc(b"GURL");
 const CORE_EVENT_CLASS: u32 = fourcc(b"aevt");
 const OPEN_DOCUMENTS: u32 = fourcc(b"odoc");
+const OPEN_APPLICATION: u32 = fourcc(b"oapp");
+const REOPEN_APPLICATION: u32 = fourcc(b"rapp");
+const KEY_PROP_DATA: u32 = fourcc(b"prdt");
+const LAUNCHED_AS_LOGIN_ITEM: u32 = fourcc(b"lgit");
 const KEY_DIRECT_OBJECT: u32 = fourcc(b"----");
 const KEY_SENDER_PID: u32 = fourcc(b"spid");
 
@@ -95,6 +101,35 @@ define_class!(
             }
         }
 
+        /// リンク経由の起動では oapp ではなく GURL / odoc が届くので、ここに来るのはアプリ自体を開いたときだけ
+        #[unsafe(method(handleOpenApplication:withReplyEvent:))]
+        fn handle_open_application(
+            &self,
+            event: &NSAppleEventDescriptor,
+            _reply: &NSAppleEventDescriptor,
+        ) {
+            let login_item = event
+                .paramDescriptorForKeyword(KEY_PROP_DATA)
+                .is_some_and(|d| d.enumCodeValue() == LAUNCHED_AS_LOGIN_ITEM);
+            if !login_item {
+                self.emit(Event::OpenSettings);
+            }
+        }
+
+        #[unsafe(method(handleReopenApplication:withReplyEvent:))]
+        fn handle_reopen_application(
+            &self,
+            _event: &NSAppleEventDescriptor,
+            _reply: &NSAppleEventDescriptor,
+        ) {
+            self.emit(Event::OpenSettings);
+        }
+
+        #[unsafe(method(applicationWillFinishLaunching:))]
+        fn application_will_finish_launching(&self, _notification: &NSNotification) {
+            install_apple_event_handlers(self);
+        }
+
         #[unsafe(method(openSettings:))]
         fn open_settings(&self, _sender: Option<&AnyObject>) {
             self.emit(Event::OpenSettings);
@@ -137,8 +172,20 @@ fn sender_pid(event: &NSAppleEventDescriptor) -> Option<i32> {
         .filter(|pid| *pid > 0)
 }
 
-/// NSApplication の起動処理が odoc ハンドラを上書きするため、起動前と起動後の両方で呼ぶ
-pub fn install_apple_event_handlers(handler: &Handler) {
+/// NSApplication は finishLaunching で oapp / odoc 等のハンドラを登録してから起動時のイベントを配送する。
+/// その間に割り込めるのは willFinishLaunching だけなので、そこでハンドラを登録する
+pub fn install_apple_event_handlers_on_launch(handler: &Handler) {
+    unsafe {
+        NSNotificationCenter::defaultCenter().addObserver_selector_name_object(
+            handler,
+            sel!(applicationWillFinishLaunching:),
+            Some(NSApplicationWillFinishLaunchingNotification),
+            None,
+        );
+    }
+}
+
+fn install_apple_event_handlers(handler: &Handler) {
     let manager = NSAppleEventManager::sharedAppleEventManager();
     unsafe {
         manager.setEventHandler_andSelector_forEventClass_andEventID(
@@ -152,6 +199,18 @@ pub fn install_apple_event_handlers(handler: &Handler) {
             sel!(handleOpenDocuments:withReplyEvent:),
             CORE_EVENT_CLASS,
             OPEN_DOCUMENTS,
+        );
+        manager.setEventHandler_andSelector_forEventClass_andEventID(
+            handler,
+            sel!(handleOpenApplication:withReplyEvent:),
+            CORE_EVENT_CLASS,
+            OPEN_APPLICATION,
+        );
+        manager.setEventHandler_andSelector_forEventClass_andEventID(
+            handler,
+            sel!(handleReopenApplication:withReplyEvent:),
+            CORE_EVENT_CLASS,
+            REOPEN_APPLICATION,
         );
     }
 }

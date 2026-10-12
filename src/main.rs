@@ -23,8 +23,7 @@ fn main() {
 
     let (tx, rx) = futures_channel::mpsc::unbounded();
     let handler = macos::Handler::new(mtm, move |event| _ = tx.unbounded_send(event));
-    // 起動のきっかけになったリンクのイベントを取りこぼさないよう、イベントループ開始前に登録する
-    macos::install_apple_event_handlers(&handler);
+    macos::install_apple_event_handlers_on_launch(&handler);
 
     // taoはデフォルトでRegularを明示的に設定するため、Info.plistのLSUIElementだけではDockに出てしまう
     let mut event_loop = EventLoopBuilder::with_user_event().build();
@@ -45,7 +44,6 @@ fn main() {
         .with_custom_head(format!("<style>{}</style>", ui::STYLE))
         .with_custom_event_handler(move |event, _| {
             if let Event::NewEvents(StartCause::Init) = event {
-                macos::install_apple_event_handlers(&handler);
                 status_item.replace(Some(macos::install_status_item(&handler, mtm)));
             }
         });
