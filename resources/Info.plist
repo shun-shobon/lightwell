@@ -6,6 +6,8 @@
 	<string>ja</string>
 	<key>CFBundleExecutable</key>
 	<string>lightwell</string>
+	<key>CFBundleIconFile</key>
+	<string>AppIcon</string>
 	<key>CFBundleIdentifier</key>
 	<string>tech.s2n.lightwell</string>
 	<key>CFBundleInfoDictionaryVersion</key>

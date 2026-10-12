@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100" viewBox="0 0 100 100">
+  <defs>
+    <mask id="m0" maskUnits="userSpaceOnUse" x="0" y="0" width="1024" height="1024"><rect width="1024" height="1024" fill="white"/><rect x="272" y="332" width="480" height="360" rx="40" fill="black" stroke="black" stroke-width="80"/><rect x="352" y="412" width="480" height="360" rx="40" fill="black" stroke="black" stroke-width="80"/></mask>
+    <mask id="m1" maskUnits="userSpaceOnUse" x="0" y="0" width="1024" height="1024"><rect width="1024" height="1024" fill="white"/><rect x="352" y="412" width="480" height="360" rx="40" fill="black" stroke="black" stroke-width="80"/></mask>
+    <mask id="m2" maskUnits="userSpaceOnUse" x="0" y="0" width="1024" height="1024"><rect width="1024" height="1024" fill="white"/><path d="M512 712 L672 552 M584 552 H672 V640" fill="none" stroke="black" stroke-width="56" stroke-linecap="round" stroke-linejoin="round"/></mask>
+  </defs>
+  <g transform="translate(50 50) scale(0.1375) translate(-512 -512)">
+    <g mask="url(#m0)"><rect x="192" y="252" width="480" height="360" rx="40" fill="none" stroke="black" stroke-width="46"/></g>
+    <g mask="url(#m1)"><rect x="272" y="332" width="480" height="360" rx="40" fill="none" stroke="black" stroke-width="46"/></g>
+    <g mask="url(#m2)"><rect x="352" y="412" width="480" height="360" rx="40" fill="black"/></g>
+  </g>
+</svg>

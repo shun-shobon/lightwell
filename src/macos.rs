@@ -18,7 +18,7 @@ use objc2_app_kit::{
     NSWorkspace, NSWorkspaceOpenConfiguration,
 };
 use objc2_foundation::{
-    NSActivityOptions, NSAppleEventDescriptor, NSAppleEventManager, NSArray, NSBundle,
+    NSActivityOptions, NSAppleEventDescriptor, NSAppleEventManager, NSArray, NSBundle, NSData,
     NSDictionary, NSError, NSFileManager, NSPoint, NSProcessInfo, NSRect, NSSize, NSString, NSURL,
 };
 use objc2_service_management::{SMAppService, SMAppServiceStatus};
@@ -159,15 +159,14 @@ pub fn install_apple_event_handlers(handler: &Handler) {
 pub fn install_status_item(handler: &Handler, mtm: MainThreadMarker) -> Retained<NSStatusItem> {
     let item = NSStatusBar::systemStatusBar().statusItemWithLength(-1.0);
     if let Some(button) = item.button(mtm) {
-        let image = NSImage::imageWithSystemSymbolName_accessibilityDescription(
-            &NSString::from_str("arrow.triangle.branch"),
-            Some(&NSString::from_str("Lightwell")),
-        );
-        if let Some(image) = image {
+        let data = NSData::with_bytes(include_bytes!("../resources/MenuBarIcon.tiff"));
+        if let Some(image) = NSImage::initWithData(NSImage::alloc(), &data) {
+            image.setSize(NSSize::new(18.0, 18.0));
             image.setTemplate(true);
+            image.setAccessibilityDescription(Some(&NSString::from_str("Lightwell")));
             button.setImage(Some(&image));
         } else {
-            button.setTitle(&NSString::from_str("BR"));
+            button.setTitle(&NSString::from_str("Lightwell"));
         }
     }
 

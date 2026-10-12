@@ -6,9 +6,10 @@ cargo build --release
 
 app="target/release/Lightwell.app"
 rm -rf "$app"
-mkdir -p "$app/Contents/MacOS"
+mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources"
 cp target/release/lightwell "$app/Contents/MacOS/"
 cp resources/Info.plist "$app/Contents/"
+cp resources/AppIcon.icns "$app/Contents/Resources/"
 codesign --force --sign - "$app"
 
 if [[ "${1:-}" == "--install" ]]; then
